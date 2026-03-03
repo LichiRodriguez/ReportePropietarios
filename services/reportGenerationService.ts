@@ -103,9 +103,13 @@ export class ReportGenerationService {
       return existingReport.id;
     }
 
-    const [metrics, marketData] = await Promise.all([
+    const [metrics, marketData, similarProperties] = await Promise.all([
       this.metricsService.getPropertyMetrics(propertyId, month),
       this.marketService.comparePropertyToMarket(propertyId),
+      this.marketService.getSimilarProperties(propertyId, month).catch(err => {
+        console.warn('Could not fetch similar properties:', err);
+        return null;
+      }),
     ]);
 
     const metricsComparison = await this.metricsService.getMetricsComparison(propertyId, month);
@@ -132,6 +136,7 @@ export class ReportGenerationService {
         market_average: marketData.market_average,
         position: marketData.position,
         difference_pct: marketData.difference_pct,
+        similar_properties: similarProperties || null,
       },
       custom_notes: null,
       generated_at: new Date().toISOString(),

@@ -16,6 +16,28 @@ interface ComparisonData {
   difference_pct: number;
 }
 
+interface SimilarProperty {
+  address: string;
+  price: number;
+  surface_total: number | null;
+  rooms: number | null;
+  days_on_market: number;
+  total_views: number;
+  leads_count: number;
+  favorites_count: number;
+  price_per_sqm: number | null;
+}
+
+interface SimilarPropertiesData {
+  properties: SimilarProperty[];
+  search_criteria: {
+    neighborhood: string;
+    property_type: string;
+    price_min: number;
+    price_max: number;
+  };
+}
+
 export class MarketAnalysisService {
   private supabase: SupabaseClient;
   private searchEngineUrl: string;
@@ -114,6 +136,138 @@ export class MarketAnalysisService {
       position,
       difference_pct: Math.round(difference_pct * 100) / 100,
     };
+  }
+
+  async getSimilarProperties(propertyId: string, month: Date): Promise<SimilarPropertiesData> {
+    const { data: property, error } = await this.supabase
+      .from('properties')
+      .select('id, price, neighborhood, property_type')
+      .eq('id', propertyId)
+      .single();
+
+    if (error || !property) {
+      throw new Error('Property not found');
+    }
+
+    const priceMargin = 0.25;
+    const priceMin = Math.round(property.price * (1 - priceMargin));
+    const priceMax = Math.round(property.price * (1 + priceMargin));
+
+    const searchCriteria = {
+      neighborhood: property.neighborhood,
+      property_type: property.property_type,
+      price_min: priceMin,
+      price_max: priceMax,
+    };
+
+    // Try search engine first, fall back to Supabase
+    try {
+      const result = await this.fetchSimilarFromSearchEngine(property, month, searchCriteria);
+      if (result.properties.length > 0) return result;
+    } catch (err) {
+      console.warn('Search engine unavailable, falling back to database:', err);
+    }
+
+    return this.fetchSimilarFromDatabase(propertyId, month, searchCriteria);
+  }
+
+  private async fetchSimilarFromSearchEngine(
+    property: { id: string; neighborhood: string; property_type: string; price: number },
+    month: Date,
+    searchCriteria: SimilarPropertiesData['search_criteria']
+  ): Promise<SimilarPropertiesData> {
+    const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+    const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+    const response = await fetch(`${this.searchEngineUrl}/api/search/similar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        neighborhood: property.neighborhood,
+        property_type: property.property_type,
+        price_min: searchCriteria.price_min,
+        price_max: searchCriteria.price_max,
+        exclude_id: property.id,
+        limit: 5,
+        start_date: startOfMonth.toISOString(),
+        end_date: endOfMonth.toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Search engine returned ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      properties: (data.results || []).map((r: any) => ({
+        address: r.address || 'Sin dirección',
+        price: r.price || 0,
+        surface_total: r.surface_total || null,
+        rooms: r.rooms || null,
+        days_on_market: r.days_on_market || 0,
+        total_views: r.total_views || r.views || 0,
+        leads_count: r.leads_count || r.leads || 0,
+        favorites_count: r.favorites_count || r.favorites || 0,
+        price_per_sqm: r.surface_total ? Math.round(r.price / r.surface_total) : null,
+      })),
+      search_criteria: searchCriteria,
+    };
+  }
+
+  private async fetchSimilarFromDatabase(
+    excludePropertyId: string,
+    month: Date,
+    searchCriteria: SimilarPropertiesData['search_criteria']
+  ): Promise<SimilarPropertiesData> {
+    const { data: listings, error } = await this.supabase
+      .from('properties')
+      .select('id, address, price, surface_total, rooms, created_at')
+      .eq('neighborhood', searchCriteria.neighborhood)
+      .eq('property_type', searchCriteria.property_type)
+      .eq('status', 'active')
+      .neq('id', excludePropertyId)
+      .gte('price', searchCriteria.price_min)
+      .lte('price', searchCriteria.price_max)
+      .limit(5);
+
+    if (error || !listings) {
+      return { properties: [], search_criteria: searchCriteria };
+    }
+
+    const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+    const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+    const now = new Date();
+
+    const properties: SimilarProperty[] = [];
+    for (const listing of listings) {
+      const { data: metrics } = await this.supabase
+        .from('property_metrics')
+        .select('views, leads, favorites')
+        .eq('property_id', listing.id)
+        .gte('date', startOfMonth.toISOString())
+        .lte('date', endOfMonth.toISOString());
+
+      const totalViews = metrics?.reduce((s: number, m: any) => s + (m.views || 0), 0) || 0;
+      const totalLeads = metrics?.reduce((s: number, m: any) => s + (m.leads || 0), 0) || 0;
+      const totalFavorites = metrics?.reduce((s: number, m: any) => s + (m.favorites || 0), 0) || 0;
+      const daysOnMarket = Math.floor((now.getTime() - new Date(listing.created_at).getTime()) / (1000 * 60 * 60 * 24));
+
+      properties.push({
+        address: listing.address,
+        price: listing.price,
+        surface_total: listing.surface_total,
+        rooms: listing.rooms,
+        days_on_market: daysOnMarket,
+        total_views: totalViews,
+        leads_count: totalLeads,
+        favorites_count: totalFavorites,
+        price_per_sqm: listing.surface_total ? Math.round(listing.price / listing.surface_total) : null,
+      });
+    }
+
+    return { properties, search_criteria: searchCriteria };
   }
 
   private async calculatePriceTrend(

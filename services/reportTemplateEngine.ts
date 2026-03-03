@@ -52,6 +52,12 @@ export class ReportTemplateEngine {
     });
 
     Handlebars.registerHelper('eq', (a: any, b: any) => a === b);
+    Handlebars.registerHelper('gt', (a: number, b: number) => a > b);
+
+    Handlebars.registerHelper('truncateAddress', (address: string) => {
+      if (!address) return '';
+      return address.length > 35 ? address.substring(0, 35) + '...' : address;
+    });
   }
 
   async renderReport(reportId: string): Promise<string> {
@@ -82,13 +88,18 @@ export class ReportTemplateEngine {
 
     const template = Handlebars.compile(this.getTemplate());
 
+    const marketData = report.market_data || {};
+    const similarData = marketData.similar_properties || {};
+
     return template({
       report,
       property: report.properties,
       owner: report.properties.owners,
       metrics: report.metrics || {},
       comparison: report.metrics_comparison || {},
-      market: report.market_data || {},
+      market: marketData,
+      similarProperties: similarData.properties || [],
+      similarCriteria: similarData.search_criteria || null,
       customNotes: report.custom_notes,
       reportMonth: report.report_month,
       generatedAt: report.generated_at,
@@ -123,6 +134,12 @@ export class ReportTemplateEngine {
     .portal-name { font-size: 12px; color: #64748b; }
     .portal-value { font-size: 20px; font-weight: bold; color: #1e40af; }
     .notes { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px; padding: 16px; }
+    .similar-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+    .similar-table th { background: #f1f5f9; padding: 10px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
+    .similar-table td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }
+    .similar-table tr:last-child td { border-bottom: none; }
+    .similar-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .similar-criteria { font-size: 13px; color: #64748b; margin-bottom: 8px; }
     .footer { text-align: center; padding: 24px; color: #94a3b8; font-size: 12px; }
   </style>
 </head>
@@ -222,6 +239,43 @@ export class ReportTemplateEngine {
         {{positionText market.position}} ({{formatPercent market.difference_pct}})
       </div>
     </div>
+
+    {{#if (gt similarProperties.length 0)}}
+    <div class="section">
+      <h2>Propiedades Similares en la Zona</h2>
+      {{#if similarCriteria}}
+      <p class="similar-criteria">
+        Propiedades en {{similarCriteria.neighborhood}} entre {{formatCurrency similarCriteria.price_min}} y {{formatCurrency similarCriteria.price_max}}
+      </p>
+      {{/if}}
+      <table class="similar-table">
+        <thead>
+          <tr>
+            <th>Dirección</th>
+            <th>Precio</th>
+            <th>Sup.</th>
+            <th>Visitas</th>
+            <th>Consultas</th>
+            <th>Favs</th>
+            <th>Días pub.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each similarProperties}}
+          <tr>
+            <td>{{truncateAddress this.address}}</td>
+            <td>{{formatCurrency this.price}}</td>
+            <td>{{#if this.surface_total}}{{this.surface_total}} m²{{else}}-{{/if}}</td>
+            <td>{{formatNumber this.total_views}}</td>
+            <td>{{formatNumber this.leads_count}}</td>
+            <td>{{formatNumber this.favorites_count}}</td>
+            <td>{{this.days_on_market}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    {{/if}}
 
     {{#if customNotes}}
     <div class="section">

@@ -201,10 +201,10 @@ export default function ReportsPanel() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
-                    {report.properties.address}
+                    {report.properties?.address || 'Sin dirección'}
                   </h3>
                   <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '8px' }}>
-                    Propietario: {report.properties.owners.name}
+                    Propietario: {report.properties?.owners?.name || 'Sin asignar'}
                   </p>
                   <p style={{ fontSize: '12px', color: '#94a3b8' }}>
                     {new Date(report.report_month).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}

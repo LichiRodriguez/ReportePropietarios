@@ -44,9 +44,19 @@ export default async function handler(
 
     const reportUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/reports/${id}/view`;
 
-    const ownerName = report.properties.owners.name;
-    const propertyAddress = report.properties.address;
-    const phone = report.properties.owners.whatsapp || report.properties.owners.phone;
+    const owner = report.properties?.owners;
+    const propertyAddress = report.properties?.address || 'Dirección no disponible';
+
+    if (!owner) {
+      return res.status(400).json({ error: 'Report has no associated owner' });
+    }
+
+    const phone = owner.whatsapp || owner.phone;
+    if (!phone) {
+      return res.status(400).json({ error: 'Owner has no phone or WhatsApp number configured' });
+    }
+
+    const ownerName = owner.name || 'Propietario';
 
     const reportMonth = new Date(report.report_month).toLocaleDateString('es-AR', {
       month: 'long',

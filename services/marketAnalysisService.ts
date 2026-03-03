@@ -48,7 +48,9 @@ export class MarketAnalysisService {
       }
 
       const prices = listings.map((l: any) => l.price).filter(Boolean);
-      const average_price = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
+      const average_price = prices.length > 0
+        ? prices.reduce((a: number, b: number) => a + b, 0) / prices.length
+        : 0;
 
       const pricesPerSqm = listings
         .filter((l: any) => l.price && l.surface_total)

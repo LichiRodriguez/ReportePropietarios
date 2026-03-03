@@ -48,11 +48,55 @@ function parseCsvLine(line: string): string[] {
   return fields;
 }
 
+function normalizeHeader(header: string): string {
+  const h = header.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const mapping: Record<string, string> = {
+    'nombre': 'nombre_propietario',
+    'nombre propietario': 'nombre_propietario',
+    'nombre del propietario': 'nombre_propietario',
+    'propietario': 'nombre_propietario',
+    'nombre_propietario': 'nombre_propietario',
+    'direccion': 'direccion_propiedad',
+    'direccion propiedad': 'direccion_propiedad',
+    'direccion de la propiedad': 'direccion_propiedad',
+    'direccion_propiedad': 'direccion_propiedad',
+    'email': 'email',
+    'correo': 'email',
+    'mail': 'email',
+    'telefono': 'telefono',
+    'tel': 'telefono',
+    'phone': 'telefono',
+    'whatsapp': 'whatsapp',
+    'wsp': 'whatsapp',
+    'barrio': 'barrio',
+    'zona': 'barrio',
+    'neighborhood': 'barrio',
+    'tipo operacion': 'tipo_operacion',
+    'tipo_operacion': 'tipo_operacion',
+    'tipo de operacion': 'tipo_operacion',
+    'operacion': 'tipo_operacion',
+    'precio': 'precio',
+    'price': 'precio',
+    'valor': 'precio',
+    'superficie': 'superficie_total',
+    'superficie total': 'superficie_total',
+    'superficie_total': 'superficie_total',
+    'm2': 'superficie_total',
+    'metros': 'superficie_total',
+    'ambientes': 'ambientes',
+    'rooms': 'ambientes',
+    'banos': 'banos',
+    'bathrooms': 'banos',
+  };
+  return mapping[h] || header.trim();
+}
+
 function parseCsv(text: string): CsvRow[] {
   const lines = text.split(/\r?\n/).filter(line => line.trim());
   if (lines.length < 2) return [];
 
-  const headers = parseCsvLine(lines[0]);
+  const rawHeaders = parseCsvLine(lines[0]);
+  const headers = rawHeaders.map(normalizeHeader);
   const rows: CsvRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {

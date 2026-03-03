@@ -1,0 +1,784 @@
+INSTRUCCIONES PARA CLAUDE CODE - SETUP COMPLETO AUTOMÁTICO
+Claude Code: Lee este archivo completo y ejecuta TODOS los pasos en orden. No pidas confirmación entre pasos.
+
+CONTEXTO
+Estás configurando un Sistema de Reportes Automáticos para una inmobiliaria. Debes crear toda la estructura del proyecto, copiar todos los archivos necesarios, y configurarlo completamente.
+
+PASO 1: CREAR Y PREPARAR DIRECTORIO
+bash# Crear directorio del proyecto
+mkdir -p ~/inmobiliaria-reports
+cd ~/inmobiliaria-reports
+
+# Inicializar git
+git init
+
+# Inicializar proyecto Node.js
+npm init -y
+
+PASO 2: INSTALAR TODAS LAS DEPENDENCIAS
+bashnpm install --save @supabase/supabase-js handlebars @google-analytics/data next@14 react@18 react-dom@18
+
+npm install --save-dev typescript @types/node @types/react @types/react-dom
+
+PASO 3: CREAR ESTRUCTURA DE CARPETAS
+bashmkdir -p services
+mkdir -p lib
+mkdir -p components
+mkdir -p pages/api/reports/\[id\]
+mkdir -p pages/api/cron
+mkdir -p pages/api/webhooks
+mkdir -p credentials
+mkdir -p public
+mkdir -p styles
+
+PASO 4: CREAR ARCHIVOS DE CONFIGURACIÓN
+4.1 tsconfig.json
+json{
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
+4.2 next.config.js
+javascript/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+}
+
+module.exports = nextConfig
+4.3 .gitignore
+node_modules/
+.next/
+out/
+build/
+dist/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.DS_Store
+*.pem
+credentials/
+*.json
+.vercel
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+4.4 vercel.json
+json{
+  "crons": [
+    {
+      "path": "/api/cron/generate-monthly-reports",
+      "schedule": "0 0 1 * *"
+    }
+  ]
+}
+4.5 .env.example
+env# Supabase (OBLIGATORIO)
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Motor de Búsqueda (OBLIGATORIO)
+SEARCH_ENGINE_URL=
+
+# App URL (OBLIGATORIO)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Cron Secret (OBLIGATORIO)
+CRON_SECRET=
+
+# TokkoBoker (OPCIONAL)
+TOKKO_API_KEY=
+
+# Google Analytics (OPCIONAL)
+GOOGLE_ANALYTICS_CREDENTIALS_PATH=
+GA_PROPERTY_ID=
+4.6 .env.local (archivo temporal con placeholders)
+envNEXT_PUBLIC_SUPABASE_URL=PENDING_CONFIGURATION
+NEXT_PUBLIC_SUPABASE_ANON_KEY=PENDING_CONFIGURATION
+SUPABASE_SERVICE_ROLE_KEY=PENDING_CONFIGURATION
+SEARCH_ENGINE_URL=http://localhost:3001
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+CRON_SECRET=temporary_secret_12345
+TOKKO_API_KEY=
+GOOGLE_ANALYTICS_CREDENTIALS_PATH=
+GA_PROPERTY_ID=
+
+PASO 5: CREAR TODOS LOS ARCHIVOS DE SERVICIOS
+Los archivos de servicios ya están descargados. Cópialos desde donde estén a las siguientes ubicaciones:
+Claude Code: Busca estos archivos en el directorio actual o en Downloads y cópialos:
+bash# Si los archivos están en el directorio actual:
+cp marketAnalysisService.ts services/ 2>/dev/null || echo "Archivo no encontrado: marketAnalysisService.ts"
+cp propertyMetricsService.ts services/ 2>/dev/null || echo "Archivo no encontrado: propertyMetricsService.ts"
+cp reportGenerationService.ts services/ 2>/dev/null || echo "Archivo no encontrado: reportGenerationService.ts"
+cp reportTemplateEngine.ts services/ 2>/dev/null || echo "Archivo no encontrado: reportTemplateEngine.ts"
+cp tokkobrokerService.ts services/ 2>/dev/null || echo "Archivo no encontrado: tokkobrokerService.ts"
+cp googleAnalyticsService.ts services/ 2>/dev/null || echo "Archivo no encontrado: googleAnalyticsService.ts"
+cp whatsapp.ts lib/ 2>/dev/null || echo "Archivo no encontrado: whatsapp.ts"
+cp ReportsPanel.tsx components/ 2>/dev/null || echo "Archivo no encontrado: ReportsPanel.tsx"
+
+# Si están en Downloads:
+cp ~/Downloads/marketAnalysisService.ts services/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/propertyMetricsService.ts services/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/reportGenerationService.ts services/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/reportTemplateEngine.ts services/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/tokkobrokerService.ts services/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/googleAnalyticsService.ts services/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/whatsapp.ts lib/ 2>/dev/null || echo "No encontrado en Downloads"
+cp ~/Downloads/ReportsPanel.tsx components/ 2>/dev/null || echo "No encontrado en Downloads"
+IMPORTANTE Claude Code: Si los archivos no se encuentran en ninguna ubicación, créalos desde cero usando el contenido que tienes en tu contexto. Los archivos están disponibles en los mensajes anteriores de esta conversación.
+
+PASO 6: CREAR ENDPOINTS DE API
+6.1 pages/api/reports/[id]/prepare-send.ts
+Crea este archivo con el siguiente contenido EXACTO:
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
+import { generateReportMessage } from '@/lib/whatsapp';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { id } = req.query;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing report ID' });
+  }
+
+  try {
+    const { data: report, error: fetchError } = await supabase
+      .from('monthly_property_reports')
+      .select(`
+        *,
+        properties (
+          address,
+          owners (
+            name,
+            phone,
+            whatsapp
+          )
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    const reportUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/reports/${id}/view`;
+
+    const ownerName = report.properties.owners.name;
+    const propertyAddress = report.properties.address;
+    const phone = report.properties.owners.whatsapp || report.properties.owners.phone;
+    
+    const reportMonth = new Date(report.report_month).toLocaleDateString('es-AR', {
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const metrics = {
+      total_views: report.metrics?.total_views || 0,
+      leads_count: report.metrics?.leads_count || 0,
+      visit_requests: report.metrics?.visit_requests || 0
+    };
+
+    const message = generateReportMessage(
+      ownerName,
+      propertyAddress,
+      reportMonth,
+      metrics,
+      reportUrl
+    );
+
+    return res.status(200).json({
+      success: true,
+      phone: phone,
+      message: message,
+      report_url: reportUrl,
+      owner_name: ownerName
+    });
+
+  } catch (error) {
+    console.error('Error preparing report send:', error);
+    return res.status(500).json({ 
+      error: 'Failed to prepare report',
+      details: error.message 
+    });
+  }
+}
+6.2 pages/api/reports/[id]/mark-sent.ts
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { id } = req.query;
+  const { phone } = req.body;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing report ID' });
+  }
+
+  try {
+    const { error: updateError } = await supabase
+      .from('monthly_property_reports')
+      .update({
+        status: 'sent',
+        sent_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    await supabase.from('report_deliveries').insert({
+      report_id: id,
+      delivery_method: 'whatsapp',
+      recipient_phone: phone,
+      status: 'sent',
+      sent_at: new Date().toISOString()
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Report marked as sent'
+    });
+
+  } catch (error) {
+    console.error('Error marking report as sent:', error);
+    return res.status(500).json({ 
+      error: 'Failed to mark report as sent',
+      details: error.message 
+    });
+  }
+}
+6.3 pages/api/reports/[id]/view.ts
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { ReportTemplateEngine } from '@/services/reportTemplateEngine';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const { id } = req.query;
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const templateEngine = new ReportTemplateEngine(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const html = await templateEngine.renderReport(id as string);
+
+    res.setHeader('Content-Type', 'text/html');
+    res.status(200).send(html);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+6.4 pages/api/reports/[id]/preview.ts
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { ReportTemplateEngine } from '@/services/reportTemplateEngine';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const { id } = req.query;
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const templateEngine = new ReportTemplateEngine(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const html = await templateEngine.renderReport(id as string);
+
+    const previewHtml = `
+      <div style="background: #f59e0b; color: white; padding: 10px; text-align: center; font-family: sans-serif;">
+        ⚠️ VISTA PREVIA - Este reporte aún no ha sido enviado
+      </div>
+      ${html}
+    `;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.status(200).send(previewHtml);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+6.5 pages/api/reports/pending.ts
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('monthly_property_reports')
+      .select(`
+        *,
+        properties (
+          address,
+          price,
+          owners (
+            name,
+            phone,
+            whatsapp
+          )
+        )
+      `)
+      .in('status', ['draft', 'reviewed'])
+      .order('generated_at', { ascending: false });
+
+    if (error) throw error;
+
+    return res.status(200).json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+6.6 pages/api/reports/generate.ts
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { ReportGenerationService } from '@/services/reportGenerationService';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { property_id, month } = req.body;
+
+  try {
+    const service = new ReportGenerationService(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      process.env.SEARCH_ENGINE_URL!
+    );
+
+    if (property_id) {
+      const reportMonth = month ? new Date(month) : undefined;
+      const reportId = await service.generatePropertyReport(
+        property_id, 
+        reportMonth || new Date()
+      );
+      
+      return res.status(200).json({ 
+        success: true, 
+        report_id: reportId 
+      });
+    } else {
+      const result = await service.generateMonthlyReports({
+        month: month ? new Date(month) : undefined
+      });
+      
+      return res.status(200).json(result);
+    }
+  } catch (error) {
+    return res.status(500).json({ 
+      error: 'Failed to generate report',
+      details: error.message 
+    });
+  }
+}
+6.7 pages/api/cron/generate-monthly-reports.ts
+typescriptimport type { NextApiRequest, NextApiResponse } from 'next';
+import { ReportGenerationService } from '@/services/reportGenerationService';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const authHeader = req.headers.authorization;
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    console.log('🚀 Iniciando generación de reportes mensuales...');
+
+    const service = new ReportGenerationService(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      process.env.SEARCH_ENGINE_URL!
+    );
+
+    const result = await service.generateMonthlyReports({
+      autoNotify: true
+    });
+
+    console.log('✅ Generación completada:', result);
+
+    return res.status(200).json({
+      success: true,
+      ...result,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error en generación de reportes:', error);
+    
+    return res.status(500).json({
+      error: 'Failed to generate reports',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+PASO 7: CREAR PÁGINA DE REPORTES
+pages/reports.tsx
+typescriptimport ReportsPanel from '../components/ReportsPanel';
+
+export default function ReportsPage() {
+  return (
+    <div>
+      <ReportsPanel />
+    </div>
+  );
+}
+
+PASO 8: CREAR PÁGINA DE INICIO (OPCIONAL)
+pages/index.tsx
+typescriptimport Link from 'next/link';
+
+export default function Home() {
+  return (
+    <div style={{ padding: '50px', fontFamily: 'sans-serif' }}>
+      <h1>Sistema de Reportes Automáticos</h1>
+      <p>Generación mensual de reportes para propietarios</p>
+      <br />
+      <Link href="/reports">
+        <a style={{ 
+          padding: '10px 20px', 
+          background: '#0070f3', 
+          color: 'white', 
+          borderRadius: '5px',
+          textDecoration: 'none'
+        }}>
+          Ver Panel de Reportes
+        </a>
+      </Link>
+    </div>
+  );
+}
+
+PASO 9: ACTUALIZAR package.json
+Actualiza el archivo package.json para agregar scripts:
+json{
+  "name": "inmobiliaria-reports",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google-analytics/data": "^4.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "handlebars": "^4.7.8",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.0.0"
+  }
+}
+
+PASO 10: CREAR README
+README.md
+markdown# Sistema de Reportes Automáticos - Inmobiliaria
+
+Sistema completo de generación automática de reportes mensuales para propietarios.
+
+## 🚀 Features
+
+- Generación automática mensual vía cron job
+- Integración con TokkoBoker para métricas de portales
+- Integración con Google Analytics para tráfico web
+- Panel de revisión y edición de reportes
+- Envío semi-automático por WhatsApp Web
+- Análisis de mercado automático
+- Templates personalizables
+
+## 📦 Setup
+
+1. Configurar variables de entorno en `.env.local`
+2. Ejecutar migración SQL en Supabase
+3. `npm install`
+4. `npm run dev`
+5. Visitar http://localhost:3000/reports
+
+## 📚 Documentación
+
+Ver archivos de documentación incluidos:
+- `GUIA_COMPLETA_CLAUDE_CODE.md`
+- `MVP_GUIDE.md`
+- `INTEGRATION_GUIDE.md`
+
+## 🔧 Configuración Requerida
+
+### Variables de Entorno Mínimas
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SEARCH_ENGINE_URL=
+CRON_SECRET=
+```
+
+### Variables Opcionales
+```env
+TOKKO_API_KEY=
+GOOGLE_ANALYTICS_CREDENTIALS_PATH=
+GA_PROPERTY_ID=
+```
+
+## 🎯 Uso
+
+1. Los reportes se generan automáticamente el día 1 de cada mes
+2. Revisa los reportes en `/reports`
+3. Edita notas personalizadas si es necesario
+4. Envía a propietarios por WhatsApp
+
+## 📊 Stack
+
+- Next.js 14
+- TypeScript
+- Supabase
+- Handlebars (templates)
+- Google Analytics Data API
+- TokkoBoker API
+
+PASO 11: CREAR ARCHIVO DE DOCUMENTACIÓN DE PRÓXIMOS PASOS
+NEXT_STEPS.md
+markdown# ✅ Proyecto Configurado - Próximos Pasos
+
+El proyecto está completamente configurado. Ahora necesitas:
+
+## 1. Configurar Base de Datos
+
+Ejecuta el archivo `supabase_migration_reports.sql` en Supabase:
+1. Ve a https://app.supabase.com
+2. Selecciona tu proyecto
+3. SQL Editor → New Query
+4. Pega el contenido del archivo de migración
+5. Run
+
+## 2. Configurar Variables de Entorno
+
+Edita `.env.local` con tus valores reales:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_anon_key
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+```
+
+Obtén estos valores de: Supabase → Settings → API
+
+## 3. Configurar Integraciones (Opcional)
+
+### TokkoBoker
+1. Obtén API Key de TokkoBoker
+2. Agrega a .env.local: `TOKKO_API_KEY=xxx`
+3. Mapea propiedades con IDs de TokkoBoker
+
+### Google Analytics
+1. Crea Service Account en Google Cloud
+2. Habilita Google Analytics Data API
+3. Descarga credenciales JSON
+4. Configura variables en .env.local
+
+Ver `INTEGRATION_GUIDE.md` para detalles.
+
+## 4. Probar Localmente
+```bash
+npm run dev
+```
+
+Visita:
+- http://localhost:3000 (Home)
+- http://localhost:3000/reports (Panel de reportes)
+
+## 5. Deploy a Producción
+```bash
+git add .
+git commit -m "Initial setup - Reports system"
+git push origin main
+
+# Deploy en Vercel
+vercel --prod
+```
+
+Configura las mismas variables de entorno en Vercel Dashboard.
+
+## 📚 Documentación Completa
+
+Lee estos archivos para más detalles:
+- `GUIA_COMPLETA_CLAUDE_CODE.md` - Guía completa paso a paso
+- `MVP_GUIDE.md` - Guía de la versión MVP
+- `INTEGRATION_GUIDE.md` - Configuración de integraciones
+
+PASO 12: VERIFICAR QUE TODO ESTÉ CREADO
+Ejecuta este comando para verificar la estructura:
+bashtree -L 3 -I 'node_modules'
+Deberías ver:
+.
+├── services/
+│   ├── marketAnalysisService.ts
+│   ├── propertyMetricsService.ts
+│   ├── reportGenerationService.ts
+│   ├── reportTemplateEngine.ts
+│   ├── tokkobrokerService.ts
+│   └── googleAnalyticsService.ts
+├── lib/
+│   └── whatsapp.ts
+├── components/
+│   └── ReportsPanel.tsx
+├── pages/
+│   ├── api/
+│   │   ├── reports/
+│   │   │   ├── [id]/
+│   │   │   │   ├── prepare-send.ts
+│   │   │   │   ├── mark-sent.ts
+│   │   │   │   ├── view.ts
+│   │   │   │   └── preview.ts
+│   │   │   ├── pending.ts
+│   │   │   └── generate.ts
+│   │   └── cron/
+│   │       └── generate-monthly-reports.ts
+│   ├── index.tsx
+│   └── reports.tsx
+├── package.json
+├── tsconfig.json
+├── next.config.js
+├── vercel.json
+├── .gitignore
+├── .env.local
+├── .env.example
+├── README.md
+└── NEXT_STEPS.md
+
+PASO 13: CREAR COMMIT INICIAL
+bashgit add .
+git commit -m "Initial setup - Complete reports system
+
+- Added all services (metrics, analysis, generation, templates)
+- Added WhatsApp integration (MVP version)
+- Added React components (ReportsPanel)
+- Added all API endpoints
+- Added configuration files
+- Ready for Supabase migration and environment setup"
+
+PASO 14: MOSTRAR RESUMEN Y PRÓXIMOS PASOS
+Ejecuta:
+bashecho "════════════════════════════════════════════════════════"
+echo "✅ PROYECTO COMPLETAMENTE CONFIGURADO"
+echo "════════════════════════════════════════════════════════"
+echo ""
+echo "📁 Ubicación: $(pwd)"
+echo ""
+echo "📦 Archivos creados:"
+ls -1 | wc -l
+echo ""
+echo "✅ Próximos pasos del usuario:"
+echo "  1. Configurar base de datos (ejecutar SQL en Supabase)"
+echo "  2. Actualizar .env.local con valores reales"
+echo "  3. npm run dev"
+echo "  4. Visitar http://localhost:3000/reports"
+echo ""
+echo "📚 Ver NEXT_STEPS.md para instrucciones detalladas"
+echo "════════════════════════════════════════════════════════"
+
+✅ CHECKLIST FINAL PARA CLAUDE CODE
+Antes de terminar, verifica que:
+
+ Todos los servicios están en services/
+ whatsapp.ts está en lib/
+ ReportsPanel.tsx está en components/
+ Todos los endpoints de API están creados
+ Archivos de configuración creados (tsconfig, vercel.json, etc.)
+ package.json tiene scripts configurados
+ .env.local y .env.example existen
+ README.md y NEXT_STEPS.md creados
+ Git commit inicial hecho
+ Mensaje final mostrado al usuario
+
+
+🎯 IMPORTANTE CLAUDE CODE
+Si algún archivo de servicio NO se encuentra en el sistema:
+
+Búscalo en los mensajes anteriores de la conversación
+Créalo desde cero con el contenido que tienes
+NO dejes ningún archivo sin crear
+
+Todos los archivos necesarios están en el contexto de esta conversación.
+EJECUTA TODOS LOS PASOS AUTOMÁTICAMENTE SIN PEDIR CONFIRMACIÓN

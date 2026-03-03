@@ -24,11 +24,18 @@ export class GoogleAnalyticsService {
     this.propertyId = process.env.GA_PROPERTY_ID || '';
 
     const credentialsPath = process.env.GOOGLE_ANALYTICS_CREDENTIALS_PATH;
-    if (credentialsPath && this.propertyId) {
+    const credentialsBase64 = process.env.GOOGLE_ANALYTICS_CREDENTIALS_BASE64;
+
+    if (this.propertyId && (credentialsPath || credentialsBase64)) {
       try {
-        this.client = new BetaAnalyticsDataClient({
-          keyFilename: path.resolve(credentialsPath),
-        });
+        const clientOptions = credentialsPath
+          ? { keyFilename: path.resolve(credentialsPath) }
+          : {
+              credentials: JSON.parse(
+                Buffer.from(credentialsBase64!, 'base64').toString('utf-8')
+              ),
+            };
+        this.client = new BetaAnalyticsDataClient(clientOptions);
       } catch (error) {
         console.warn('Failed to initialize Google Analytics client:', error);
       }

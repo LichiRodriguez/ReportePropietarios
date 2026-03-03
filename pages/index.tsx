@@ -6,16 +6,28 @@ export default function Home() {
       <h1>Sistema de Reportes Automaticos</h1>
       <p>Generacion mensual de reportes para propietarios</p>
       <br />
-      <Link href="/reports"
-        style={{
-          padding: '10px 20px',
-          background: '#0070f3',
-          color: 'white',
-          borderRadius: '5px',
-          textDecoration: 'none'
-        }}>
-        Ver Panel de Reportes
-      </Link>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <Link href="/reports"
+          style={{
+            padding: '10px 20px',
+            background: '#0070f3',
+            color: 'white',
+            borderRadius: '5px',
+            textDecoration: 'none'
+          }}>
+          Ver Panel de Reportes
+        </Link>
+        <Link href="/import"
+          style={{
+            padding: '10px 20px',
+            background: '#0284c7',
+            color: 'white',
+            borderRadius: '5px',
+            textDecoration: 'none'
+          }}>
+          Importar Propietarios
+        </Link>
+      </div>
     </div>
   );
 }

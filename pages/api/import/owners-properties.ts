@@ -92,7 +92,9 @@ function normalizeHeader(header: string): string {
 }
 
 function parseCsv(text: string): CsvRow[] {
-  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  // Strip BOM and zero-width characters that Excel/Google Sheets may add
+  const clean = text.replace(/^\uFEFF/, '').replace(/\u200B/g, '');
+  const lines = clean.split(/\r?\n/).filter(line => line.trim());
   if (lines.length < 2) return [];
 
   const rawHeaders = parseCsvLine(lines[0]);

@@ -1,0 +1,1131 @@
+# Sistema de Reportes Automáticos - Guía Completa para Claude Code
+
+Esta guía te llevará paso a paso para implementar el sistema completo de reportes automáticos con integración a TokkoBoker y Google Analytics.
+
+---
+
+## 📋 ÍNDICE
+
+1. [Preparación Inicial](#1-preparación-inicial)
+2. [Base de Datos](#2-base-de-datos)
+3. [Instalación de Dependencias](#3-instalación-de-dependencias)
+4. [Estructura de Archivos](#4-estructura-de-archivos)
+5. [Configuración de Variables de Entorno](#5-configuración-de-variables-de-entorno)
+6. [Integración TokkoBoker](#6-integración-tokkoboker)
+7. [Integración Google Analytics](#7-integración-google-analytics)
+8. [Testing Local](#8-testing-local)
+9. [Deploy a Producción](#9-deploy-a-producción)
+10. [Primer Uso](#10-primer-uso)
+11. [Troubleshooting](#11-troubleshooting)
+
+---
+
+## 1. PREPARACIÓN INICIAL
+
+### 1.1 Verificar Pre-requisitos
+
+Asegúrate de tener:
+- [ ] Cuenta de Supabase con proyecto creado
+- [ ] Cuenta de Vercel (para deploy)
+- [ ] Node.js 18+ instalado
+- [ ] Git configurado
+- [ ] Proyecto Next.js existente (o crear uno nuevo)
+
+### 1.2 Clonar/Preparar Proyecto
+
+```bash
+# Si ya tienes un proyecto
+cd tu-proyecto-inmobiliaria
+
+# Si necesitas crear uno nuevo
+npx create-next-app@latest inmobiliaria-reports
+cd inmobiliaria-reports
+
+# Verificar estructura
+ls -la
+```
+
+---
+
+## 2. BASE DE DATOS
+
+### 2.1 Ejecutar Migración en Supabase
+
+**Opción A: Desde Supabase Dashboard (Recomendado)**
+
+1. Ve a https://app.supabase.com
+2. Selecciona tu proyecto
+3. Click en **SQL Editor** (en el menú izquierdo)
+4. Click en **New Query**
+5. Copia TODO el contenido del archivo `supabase_migration_reports.sql`
+6. Pega en el editor
+7. Click en **Run** (o Ctrl+Enter)
+8. Espera a que termine (debería decir "Success")
+
+**Opción B: Desde Terminal**
+
+```bash
+# Necesitas tener instalado psql
+psql -h db.xxxxx.supabase.co -U postgres -d postgres -f supabase_migration_reports.sql
+
+# Te pedirá la contraseña de tu proyecto
+```
+
+### 2.2 Verificar que se Crearon las Tablas
+
+```sql
+-- Ejecuta esto en SQL Editor para verificar
+
+-- Nuevas tablas
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' 
+AND table_name IN (
+  'monthly_property_reports',
+  'report_templates',
+  'report_deliveries',
+  'traffic_sources'
+);
+
+-- Debería retornar las 4 tablas
+```
+
+### 2.3 Verificar Nuevos Campos
+
+```sql
+-- Verificar campo tokko_id en properties
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'properties' 
+AND column_name IN ('tokko_id', 'external_ids', 'slug');
+
+-- Debería retornar 3 filas
+```
+
+---
+
+## 3. INSTALACIÓN DE DEPENDENCIAS
+
+### 3.1 Instalar Paquetes Node
+
+```bash
+# Dependencias principales
+npm install handlebars
+npm install @google-analytics/data
+
+# Si no las tienes:
+npm install @supabase/supabase-js
+npm install next react react-dom
+
+# Dev dependencies (si no las tienes)
+npm install -D typescript @types/node @types/react
+```
+
+### 3.2 Verificar package.json
+
+Tu `package.json` debería tener algo como:
+
+```json
+{
+  "dependencies": {
+    "@google-analytics/data": "^4.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "handlebars": "^4.7.8",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
+```
+
+---
+
+## 4. ESTRUCTURA DE ARCHIVOS
+
+### 4.1 Crear Estructura de Carpetas
+
+```bash
+# Crear carpetas necesarias
+mkdir -p services
+mkdir -p lib
+mkdir -p pages/api/reports
+mkdir -p pages/api/cron
+mkdir -p components
+```
+
+### 4.2 Copiar Archivos de Servicios
+
+Copia los siguientes archivos a la carpeta `services/`:
+
+```bash
+services/
+├── marketAnalysisService.ts
+├── propertyMetricsService.ts
+├── reportGenerationService.ts
+├── reportTemplateEngine.ts
+├── tokkobrokerService.ts
+└── googleAnalyticsService.ts
+```
+
+**Comando:**
+```bash
+# Desde donde tengas los archivos descargados:
+cp marketAnalysisService.ts services/
+cp propertyMetricsService.ts services/
+cp reportGenerationService.ts services/
+cp reportTemplateEngine.ts services/
+cp tokkobrokerService.ts services/
+cp googleAnalyticsService.ts services/
+```
+
+### 4.3 Copiar Archivo de WhatsApp
+
+```bash
+# Copiar a la carpeta lib/
+cp whatsapp.ts lib/
+```
+
+### 4.4 Copiar Componente React
+
+```bash
+# Copiar a la carpeta components/
+cp ReportsPanel.tsx components/
+```
+
+### 4.5 Crear Endpoints de API
+
+Necesitas crear estos archivos en `pages/api/`:
+
+**Estructura de API:**
+```
+pages/api/
+├── reports/
+│   ├── [id]/
+│   │   ├── prepare-send.ts
+│   │   ├── mark-sent.ts
+│   │   ├── view.ts
+│   │   └── preview.ts
+│   ├── pending.ts
+│   └── generate.ts
+└── cron/
+    └── generate-monthly-reports.ts
+```
+
+**Crear archivos:**
+
+1. `pages/api/reports/[id]/prepare-send.ts`
+2. `pages/api/reports/[id]/mark-sent.ts`
+3. `pages/api/reports/[id]/view.ts` (del archivo `api_endpoints_additional.ts`)
+4. `pages/api/reports/[id]/preview.ts` (del archivo `api_endpoints_additional.ts`)
+5. `pages/api/reports/pending.ts` (del archivo `api_endpoints_additional.ts`)
+6. `pages/api/reports/generate.ts` (del archivo `api_endpoints_additional.ts`)
+7. `pages/api/cron/generate-monthly-reports.ts` (del archivo `api_cron.ts`)
+
+**Código para prepare-send.ts y mark-sent.ts** - Ya está en `api_send.ts`, separar en 2 archivos
+
+### 4.6 Copiar vercel.json
+
+```bash
+# Copiar a la raíz del proyecto
+cp vercel.json .
+```
+
+### 4.7 Verificar Estructura Final
+
+```bash
+tree -L 3 -I 'node_modules'
+
+# Deberías ver:
+.
+├── services/
+│   ├── marketAnalysisService.ts
+│   ├── propertyMetricsService.ts
+│   ├── reportGenerationService.ts
+│   ├── reportTemplateEngine.ts
+│   ├── tokkobrokerService.ts
+│   └── googleAnalyticsService.ts
+├── lib/
+│   └── whatsapp.ts
+├── components/
+│   └── ReportsPanel.tsx
+├── pages/
+│   └── api/
+│       ├── reports/
+│       └── cron/
+├── vercel.json
+└── package.json
+```
+
+---
+
+## 5. CONFIGURACIÓN DE VARIABLES DE ENTORNO
+
+### 5.1 Crear archivo .env.local
+
+```bash
+# En la raíz del proyecto
+touch .env.local
+```
+
+### 5.2 Agregar Variables Básicas
+
+Edita `.env.local` y agrega:
+
+```env
+# Supabase (OBLIGATORIO)
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+
+# Motor de Búsqueda (OBLIGATORIO - ajustar según tu implementación)
+SEARCH_ENGINE_URL=http://localhost:3001
+
+# App URL (OBLIGATORIO)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Cron Secret (OBLIGATORIO)
+CRON_SECRET=tu_secreto_aleatorio_aqui_12345
+
+# TokkoBoker (OPCIONAL - solo si usas TokkoBoker)
+TOKKO_API_KEY=
+
+# Google Analytics (OPCIONAL - solo si quieres métricas de GA)
+GOOGLE_ANALYTICS_CREDENTIALS_PATH=
+GA_PROPERTY_ID=
+```
+
+### 5.3 Obtener Credenciales de Supabase
+
+1. Ve a https://app.supabase.com
+2. Selecciona tu proyecto
+3. **Settings** → **API**
+4. Copia:
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` (Click en "Reveal") → `SUPABASE_SERVICE_ROLE_KEY`
+
+### 5.4 Generar CRON_SECRET
+
+```bash
+# Generar un secreto aleatorio
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Copiar el resultado a CRON_SECRET
+```
+
+---
+
+## 6. INTEGRACIÓN TOKKOBOKER
+
+### 6.1 Obtener API Key
+
+1. Inicia sesión en TokkoBoker
+2. Ve a **Configuración** → **Integraciones** → **API**
+3. Genera una nueva API Key
+4. Copia la key
+
+### 6.2 Configurar en .env.local
+
+```env
+TOKKO_API_KEY=tu_api_key_de_tokkoboker
+```
+
+### 6.3 Mapear Propiedades
+
+Necesitas vincular tus propiedades con los IDs de TokkoBoker.
+
+**Opción 1: Por cada propiedad manualmente**
+
+```sql
+-- En Supabase SQL Editor
+UPDATE properties 
+SET tokko_id = 'ID_DE_TOKKO_AQUI'
+WHERE id = 'uuid-de-tu-propiedad';
+
+-- Ejemplo:
+UPDATE properties 
+SET tokko_id = '12345'
+WHERE address = 'Av. Corrientes 1234';
+```
+
+**Opción 2: Usando external_ids (más flexible)**
+
+```sql
+UPDATE properties 
+SET external_ids = jsonb_build_object('tokko', 'ID_DE_TOKKO_AQUI')
+WHERE id = 'uuid-de-tu-propiedad';
+```
+
+**Opción 3: Importar desde CSV**
+
+Si tienes muchas propiedades, crea un CSV:
+
+```csv
+property_id,tokko_id
+uuid-prop-1,12345
+uuid-prop-2,12346
+uuid-prop-3,12347
+```
+
+Luego importa:
+
+```sql
+-- Primero crea tabla temporal
+CREATE TEMP TABLE tokko_mapping (
+  property_id UUID,
+  tokko_id VARCHAR(100)
+);
+
+-- Importa el CSV desde Supabase Dashboard
+-- Table Editor → tokko_mapping → Import data
+
+-- Actualiza properties
+UPDATE properties p
+SET tokko_id = tm.tokko_id
+FROM tokko_mapping tm
+WHERE p.id = tm.property_id;
+```
+
+### 6.4 Probar Integración TokkoBoker
+
+Crea un archivo de prueba `test-tokko.ts`:
+
+```typescript
+import { TokkoBokerService } from './services/tokkobrokerService';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const service = new TokkoBokerService(
+  process.env.TOKKO_API_KEY!,
+  supabase
+);
+
+async function test() {
+  // Probar con una propiedad
+  const propertyId = 'tu-property-uuid';
+  const tokkoId = await service.getTokkoPropertyId(propertyId);
+  
+  console.log('TokkoBoker ID:', tokkoId);
+  
+  if (tokkoId) {
+    const stats = await service.getPropertyStats(
+      tokkoId,
+      new Date(2024, 1, 1), // Febrero 2024
+      new Date(2024, 1, 29)
+    );
+    
+    console.log('Stats:', stats);
+  }
+}
+
+test();
+```
+
+Ejecutar:
+```bash
+npx ts-node test-tokko.ts
+```
+
+Deberías ver algo como:
+```
+TokkoBoker ID: 12345
+Stats: {
+  views: 145,
+  portal_views: {
+    zonaprop: 80,
+    mercadolibre: 45,
+    argenprop: 20
+  },
+  leads: 12,
+  ...
+}
+```
+
+---
+
+## 7. INTEGRACIÓN GOOGLE ANALYTICS
+
+### 7.1 Crear Service Account en Google Cloud
+
+1. Ve a https://console.cloud.google.com
+2. Crea un proyecto nuevo (o usa existente)
+3. Nombre: "Inmobiliaria Reports" (o el que prefieras)
+4. Click **Create**
+
+### 7.2 Habilitar Google Analytics Data API
+
+1. En el proyecto, ve a **APIs & Services** → **Library**
+2. Busca "Google Analytics Data API"
+3. Click en el resultado
+4. Click **Enable**
+5. Espera a que se habilite (~30 segundos)
+
+### 7.3 Crear Service Account
+
+1. **IAM & Admin** → **Service Accounts**
+2. Click **Create Service Account**
+3. Nombre: `analytics-reports`
+4. ID: Se genera automáticamente
+5. Click **Create and Continue**
+6. Skip "Grant access" (no selecciones roles)
+7. Click **Continue**
+8. Click **Done**
+
+### 7.4 Generar Credenciales JSON
+
+1. Click en el service account que acabas de crear
+2. Ve a la pestaña **Keys**
+3. Click **Add Key** → **Create new key**
+4. Tipo: **JSON**
+5. Click **Create**
+6. Se descargará un archivo JSON (por ejemplo: `inmobiliaria-reports-abc123.json`)
+7. **Guarda este archivo en un lugar seguro**
+
+### 7.5 Dar Permisos en Google Analytics
+
+1. Ve a https://analytics.google.com
+2. Click en **Admin** (rueda en la esquina inferior izquierda)
+3. En la columna **Property**, click **Property Access Management**
+4. Click el botón **+** (Add users)
+5. Email: Copia el email del service account (está en el JSON, campo `client_email`)
+   - Ejemplo: `analytics-reports@inmobiliaria-reports.iam.gserviceaccount.com`
+6. Role: Selecciona **Viewer**
+7. Desactiva "Notify new users by email"
+8. Click **Add**
+
+### 7.6 Obtener Property ID
+
+1. En Google Analytics, **Admin**
+2. Columna **Property** → **Property Settings**
+3. Copia el **Property ID** (número de 9 dígitos, ej: `123456789`)
+
+### 7.7 Configurar Variables de Entorno
+
+**Para desarrollo local:**
+
+```bash
+# Copia el archivo JSON a tu proyecto
+cp ~/Downloads/inmobiliaria-reports-abc123.json ./credentials/ga-credentials.json
+
+# Agrega a .env.local
+GOOGLE_ANALYTICS_CREDENTIALS_PATH=./credentials/ga-credentials.json
+GA_PROPERTY_ID=123456789
+```
+
+**Para producción (Vercel):**
+
+El archivo JSON es muy grande para una variable de entorno. Usa base64:
+
+```bash
+# Convertir a base64
+cat ./credentials/ga-credentials.json | base64 | tr -d '\n'
+
+# Copia el resultado (será una cadena muy larga)
+```
+
+En Vercel:
+```env
+# No uses GOOGLE_ANALYTICS_CREDENTIALS_PATH en producción
+# Usa esto en su lugar:
+GOOGLE_ANALYTICS_CREDENTIALS_BASE64=eyJ0eXBlIjoi....(resultado del base64)
+GA_PROPERTY_ID=123456789
+```
+
+Y actualiza el código para leer de base64 cuando esté en producción:
+
+```typescript
+// En googleAnalyticsService.ts
+const credentials = process.env.GOOGLE_ANALYTICS_CREDENTIALS_PATH
+  ? { keyFilename: process.env.GOOGLE_ANALYTICS_CREDENTIALS_PATH }
+  : {
+      credentials: JSON.parse(
+        Buffer.from(
+          process.env.GOOGLE_ANALYTICS_CREDENTIALS_BASE64!,
+          'base64'
+        ).toString('utf-8')
+      )
+    };
+
+const analyticsDataClient = new BetaAnalyticsDataClient(credentials);
+```
+
+### 7.8 Configurar URLs de Propiedades
+
+Necesitas que cada propiedad tenga un slug/URL.
+
+**Opción 1: Generar slugs automáticamente**
+
+```sql
+-- Generar slugs desde la dirección
+UPDATE properties 
+SET slug = LOWER(
+  REGEXP_REPLACE(
+    REGEXP_REPLACE(address, '[^a-zA-Z0-9\s-]', '', 'g'),
+    '\s+', '-', 'g'
+  )
+)
+WHERE slug IS NULL;
+
+-- Ejemplo: "Av. Corrientes 1234" → "av-corrientes-1234"
+```
+
+**Opción 2: Asignar manualmente**
+
+```sql
+UPDATE properties 
+SET slug = 'av-corrientes-1234'
+WHERE id = 'uuid-de-propiedad';
+```
+
+### 7.9 Probar Integración Google Analytics
+
+Crea archivo `test-ga.ts`:
+
+```typescript
+import { GoogleAnalyticsService } from './services/googleAnalyticsService';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const service = new GoogleAnalyticsService(
+  process.env.GOOGLE_ANALYTICS_CREDENTIALS_PATH!,
+  process.env.GA_PROPERTY_ID!,
+  supabase
+);
+
+async function test() {
+  const metrics = await service.getPropertyPageMetrics(
+    '/propiedades/av-corrientes-1234', // Ajusta según tu URL
+    new Date(2024, 1, 1),
+    new Date(2024, 1, 29)
+  );
+  
+  console.log('GA Metrics:', metrics);
+}
+
+test();
+```
+
+Ejecutar:
+```bash
+npx ts-node test-ga.ts
+```
+
+Deberías ver:
+```
+GA Metrics: {
+  sessions: 145,
+  users: 98,
+  pageviews: 203,
+  avg_session_duration: 82,
+  bounce_rate: 0.45,
+  engagement_rate: 0.72,
+  event_count: 450
+}
+```
+
+---
+
+## 8. TESTING LOCAL
+
+### 8.1 Iniciar Servidor de Desarrollo
+
+```bash
+npm run dev
+```
+
+### 8.2 Probar Generación de Reporte
+
+**Opción A: Desde API**
+
+```bash
+# Generar reporte para una propiedad específica
+curl -X POST http://localhost:3000/api/reports/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "tu-property-uuid",
+    "month": "2024-02-01"
+  }'
+```
+
+**Opción B: Desde navegador**
+
+1. Instala extensión REST Client (ej: Thunder Client en VSCode)
+2. POST a `http://localhost:3000/api/reports/generate`
+3. Body:
+```json
+{
+  "property_id": "tu-property-uuid",
+  "month": "2024-02-01"
+}
+```
+
+### 8.3 Verificar que se Creó el Reporte
+
+```sql
+-- En Supabase SQL Editor
+SELECT 
+  r.id,
+  r.status,
+  r.report_month,
+  p.address,
+  r.metrics->>'total_views' as views,
+  r.metrics->>'leads_count' as leads
+FROM monthly_property_reports r
+JOIN properties p ON r.property_id = p.id
+ORDER BY r.generated_at DESC
+LIMIT 5;
+```
+
+### 8.4 Probar Panel de Reportes
+
+1. Crea una página en `pages/reports.tsx`:
+
+```typescript
+import ReportsPanel from '../components/ReportsPanel';
+
+export default function ReportsPage() {
+  return <ReportsPanel />;
+}
+```
+
+2. Visita http://localhost:3000/reports
+3. Deberías ver el panel con los reportes
+
+### 8.5 Probar Envío por WhatsApp
+
+1. En el panel, selecciona un reporte
+2. Click "Enviar por WhatsApp"
+3. Click "Abrir WhatsApp"
+4. Debería abrirse WhatsApp Web con el mensaje
+5. **IMPORTANTE**: Para testing, usa tu propio número primero
+
+### 8.6 Checklist de Testing
+
+- [ ] Genera reporte de prueba (API)
+- [ ] Verifica que aparezca en la BD
+- [ ] Abre el panel de reportes
+- [ ] Selecciona un reporte
+- [ ] Ve la vista previa
+- [ ] Edita notas personalizadas
+- [ ] Guarda las notas
+- [ ] Prepara envío por WhatsApp
+- [ ] Abre WhatsApp (con tu número)
+- [ ] Envía el mensaje de prueba
+- [ ] Confirma envío
+- [ ] Verifica que se marque como "sent" en BD
+
+---
+
+## 9. DEPLOY A PRODUCCIÓN
+
+### 9.1 Preparar para Deploy
+
+```bash
+# Asegúrate de que todo esté commiteado
+git add .
+git commit -m "Add reports system"
+
+# Push a GitHub (o tu repo)
+git push origin main
+```
+
+### 9.2 Deploy en Vercel
+
+**Opción A: Desde Vercel Dashboard**
+
+1. Ve a https://vercel.com
+2. Click **Add New** → **Project**
+3. Importa tu repositorio de GitHub
+4. Configura:
+   - Framework Preset: Next.js
+   - Root Directory: ./
+   - Build Command: `npm run build` (default)
+   - Output Directory: `.next` (default)
+5. Click **Deploy**
+
+**Opción B: Desde CLI**
+
+```bash
+# Instalar Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Sigue las instrucciones
+# Primera vez te pedirá login
+```
+
+### 9.3 Configurar Variables de Entorno en Vercel
+
+1. En Vercel Dashboard, ve a tu proyecto
+2. **Settings** → **Environment Variables**
+3. Agrega TODAS las variables de `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+SEARCH_ENGINE_URL
+NEXT_PUBLIC_APP_URL (https://tu-app.vercel.app)
+CRON_SECRET
+TOKKO_API_KEY
+GOOGLE_ANALYTICS_CREDENTIALS_BASE64 (no PATH, usar base64)
+GA_PROPERTY_ID
+```
+
+**IMPORTANTE**: 
+- Asegúrate de marcar cada variable para: Production, Preview, Development
+- Para `NEXT_PUBLIC_APP_URL` usa tu URL de Vercel: `https://tu-app.vercel.app`
+
+### 9.4 Verificar Cron Job
+
+1. En Vercel, ve a **Settings** → **Cron Jobs**
+2. Deberías ver:
+   - Path: `/api/cron/generate-monthly-reports`
+   - Schedule: `0 0 1 * *` (1° de cada mes a las 00:00 UTC)
+3. Status: Enabled
+
+Si no aparece, verifica que `vercel.json` esté en la raíz del proyecto.
+
+### 9.5 Primer Deploy - Verificaciones
+
+1. Espera a que termine el deploy
+2. Visita tu sitio: `https://tu-app.vercel.app/reports`
+3. Debería cargar el panel (puede estar vacío si no hay reportes)
+4. Prueba generar un reporte desde producción:
+
+```bash
+curl -X POST https://tu-app.vercel.app/api/reports/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -d '{"property_id": "tu-uuid"}'
+```
+
+---
+
+## 10. PRIMER USO
+
+### 10.1 Generar Reportes del Mes
+
+**Opción A: Automático (Esperar al día 1)**
+
+El cron job se ejecutará automáticamente el día 1 de cada mes.
+
+**Opción B: Manual (Trigger ahora)**
+
+```bash
+# Ejecutar el cron job manualmente
+curl -X GET https://tu-app.vercel.app/api/cron/generate-monthly-reports \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+O desde el código:
+
+```typescript
+// En un script temporal o desde la consola de Vercel
+import { ReportGenerationService } from './services/reportGenerationService';
+
+const service = new ReportGenerationService(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  process.env.SEARCH_ENGINE_URL!
+);
+
+const result = await service.generateMonthlyReports();
+console.log(result);
+```
+
+### 10.2 Revisar Reportes en el Panel
+
+1. Ve a `https://tu-app.vercel.app/reports`
+2. Deberías ver la lista de reportes generados
+3. Estados posibles:
+   - **draft**: Recién generado, necesita revisión
+   - **reviewed**: Ya revisado, listo para enviar
+   - **sent**: Ya enviado al propietario
+
+### 10.3 Workflow de Revisión
+
+Para cada reporte:
+
+1. **Seleccionar** el reporte de la lista
+2. **Revisar** métricas y análisis de mercado
+3. **Agregar notas personalizadas** (opcional)
+4. **Marcar como revisado** (cambia estado a "reviewed")
+5. **Enviar por WhatsApp**:
+   - Click "Enviar por WhatsApp"
+   - Se abre WhatsApp con mensaje listo
+   - Darle enviar manualmente
+   - Confirmar que se envió
+6. El reporte cambia a estado "sent"
+
+### 10.4 Primera Tanda de Reportes
+
+Recomendación para la primera vez:
+
+1. Genera reportes solo para 2-3 propiedades (prueba)
+2. Revísalos completamente
+3. Ajusta templates o recomendaciones si es necesario
+4. Envía a propietarios de confianza
+5. Pide feedback
+6. Ajusta según feedback
+7. Luego genera para todas las propiedades
+
+---
+
+## 11. TROUBLESHOOTING
+
+### Error: "SUPABASE_URL is not defined"
+
+**Solución:**
+```bash
+# Verificar que las variables estén en .env.local
+cat .env.local | grep SUPABASE
+
+# Si no están, agregarlas
+echo 'NEXT_PUBLIC_SUPABASE_URL=https://...' >> .env.local
+echo 'SUPABASE_SERVICE_ROLE_KEY=...' >> .env.local
+
+# Reiniciar servidor
+npm run dev
+```
+
+### Error: "Cannot find module './services/...'"
+
+**Solución:**
+```bash
+# Verificar que los archivos existan
+ls -la services/
+
+# Si no existen, copiarlos nuevamente
+cp path/to/downloaded/files/*.ts services/
+```
+
+### Error: "TokkoBoker API error: 401 Unauthorized"
+
+**Solución:**
+```bash
+# Verificar API key
+echo $TOKKO_API_KEY
+
+# Si está vacía, agregarla
+# Obtener nueva key de TokkoBoker si es necesario
+```
+
+### Error: "Google Analytics: Permission denied"
+
+**Solución:**
+1. Verifica que el service account tenga permisos en GA
+2. Email del service account debe estar agregado como Viewer
+3. Espera 5-10 minutos después de agregar permisos
+
+### Error: "Property not found" en Google Analytics
+
+**Solución:**
+```sql
+-- Verificar que la propiedad tenga slug
+SELECT id, address, slug FROM properties WHERE id = 'tu-uuid';
+
+-- Si slug es NULL, agregarlo
+UPDATE properties SET slug = 'av-corrientes-1234' WHERE id = 'tu-uuid';
+```
+
+### Reportes se generan vacíos (sin datos)
+
+**Solución:**
+```sql
+-- Verificar que haya datos en el período
+SELECT COUNT(*) FROM property_views 
+WHERE property_id = 'tu-uuid'
+AND viewed_at >= '2024-02-01'
+AND viewed_at <= '2024-02-29';
+
+-- Si retorna 0, no hay datos
+-- Opciones:
+-- 1. Cambiar el mes del reporte
+-- 2. Verificar integración con TokkoBoker/GA
+-- 3. Agregar datos de prueba manualmente
+```
+
+### Cron job no se ejecuta en Vercel
+
+**Solución:**
+1. Verifica que `vercel.json` esté en la raíz
+2. Verifica que el contenido sea correcto:
+```json
+{
+  "crons": [{
+    "path": "/api/cron/generate-monthly-reports",
+    "schedule": "0 0 1 * *"
+  }]
+}
+```
+3. Re-deploy el proyecto
+4. En Vercel Dashboard → Settings → Cron Jobs, debería aparecer
+5. Nota: En plan gratuito de Vercel, crons tienen limitaciones
+
+### WhatsApp no se abre
+
+**Solución:**
+1. Verifica que el número esté en formato correcto:
+```sql
+SELECT phone, whatsapp FROM owners WHERE id = 'uuid';
+-- Debe ser: "1123456789" o "+5491123456789"
+-- NO debe tener guiones o espacios
+```
+
+2. Verifica que WhatsApp Web esté activo (desktop)
+3. Verifica que WhatsApp app esté instalada (mobile)
+4. Permite popups en el navegador
+
+### Ver logs de errores en Vercel
+
+```bash
+# Desde CLI
+vercel logs
+
+# O desde Dashboard:
+# Vercel → Tu proyecto → Deployments → Click en el más reciente → Logs
+```
+
+---
+
+## 📚 RECURSOS ADICIONALES
+
+### Documentación de Referencia
+
+- **MVP_GUIDE.md**: Guía detallada de la versión MVP
+- **INTEGRATION_GUIDE.md**: Detalles de TokkoBoker y Google Analytics
+- **REPORTS_SYSTEM_README.md**: Documentación técnica completa
+- **QUICKSTART_MVP.md**: Quick start visual
+
+### Comandos Útiles
+
+```bash
+# Ver logs en tiempo real
+npm run dev
+
+# Build local (para verificar antes de deploy)
+npm run build
+
+# Ejecutar TypeScript directamente
+npx ts-node script.ts
+
+# Verificar tipos
+npx tsc --noEmit
+
+# Ver estructura de proyecto
+tree -I 'node_modules|.next'
+```
+
+### Queries SQL Útiles
+
+```sql
+-- Ver todos los reportes
+SELECT 
+  r.id,
+  p.address,
+  r.status,
+  r.report_month,
+  r.generated_at
+FROM monthly_property_reports r
+JOIN properties p ON r.property_id = p.id
+ORDER BY r.generated_at DESC;
+
+-- Ver reportes pendientes
+SELECT COUNT(*) FROM monthly_property_reports WHERE status = 'draft';
+
+-- Ver métricas de un reporte específico
+SELECT 
+  metrics,
+  market_analysis,
+  recommendations
+FROM monthly_property_reports
+WHERE id = 'report-uuid';
+
+-- Ver propiedades con TokkoBoker ID
+SELECT id, address, tokko_id 
+FROM properties 
+WHERE tokko_id IS NOT NULL;
+
+-- Ver fuentes de tráfico
+SELECT * FROM traffic_sources 
+WHERE property_id = 'uuid'
+ORDER BY sessions DESC;
+```
+
+---
+
+## ✅ CHECKLIST FINAL
+
+Antes de considerar el sistema completo:
+
+### Setup Inicial
+- [ ] Base de datos migrada
+- [ ] Tablas creadas correctamente
+- [ ] Dependencias instaladas
+- [ ] Estructura de archivos correcta
+- [ ] Variables de entorno configuradas
+
+### Integraciones
+- [ ] TokkoBoker API key obtenida
+- [ ] Propiedades mapeadas con tokko_id
+- [ ] Google Analytics service account creado
+- [ ] GA API habilitada
+- [ ] Permisos dados en GA
+- [ ] Property ID obtenido
+- [ ] URLs/slugs configurados
+
+### Testing
+- [ ] Reporte de prueba generado
+- [ ] Panel de reportes funciona
+- [ ] Vista previa funciona
+- [ ] Edición de notas funciona
+- [ ] WhatsApp se abre correctamente
+- [ ] Mensaje de prueba enviado
+
+### Deploy
+- [ ] Código en repositorio
+- [ ] Deploy en Vercel exitoso
+- [ ] Variables de entorno en Vercel
+- [ ] Cron job configurado
+- [ ] URL de producción funcionando
+
+### Primer Uso Real
+- [ ] Reportes generados para todas las propiedades
+- [ ] Todos revisados
+- [ ] Notas agregadas
+- [ ] Enviados a propietarios
+- [ ] Feedback recopilado
+
+---
+
+## 🎉 ¡FELICITACIONES!
+
+Si llegaste hasta acá y todos los checks están ✅, tu sistema de reportes automáticos está funcionando.
+
+### Próximos Pasos Recomendados
+
+1. **Monitorear el primer mes**: Ve cómo responden los propietarios
+2. **Ajustar templates**: Personaliza el HTML según feedback
+3. **Mejorar recomendaciones**: Refina la lógica de recomendaciones
+4. **Agregar métricas**: Trackea qué reportes se abren más
+5. **Optimizar**: Mejora queries lentas si las hay
+
+### Soporte
+
+Si tienes problemas:
+1. Revisa la sección de Troubleshooting
+2. Consulta los logs en Vercel
+3. Revisa los archivos de documentación
+4. Verifica las variables de entorno
+
+¡Mucho éxito con tu sistema de reportes! 🚀

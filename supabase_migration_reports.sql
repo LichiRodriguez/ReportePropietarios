@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS properties (
   rooms INTEGER,
   bathrooms INTEGER,
   slug VARCHAR(500),
-  tokko_id VARCHAR(100),
+  tokko_id VARCHAR(100) UNIQUE,
   tokko_data JSONB,
   synced_at TIMESTAMPTZ,
   external_ids JSONB DEFAULT '{}'::jsonb,

@@ -50,6 +50,8 @@ export class ReportTemplateEngine {
       const date = new Date(dateStr);
       return date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
     });
+
+    Handlebars.registerHelper('eq', (a: any, b: any) => a === b);
   }
 
   async renderReport(reportId: string): Promise<string> {

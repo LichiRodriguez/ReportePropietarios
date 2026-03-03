@@ -29,7 +29,7 @@ export default async function handler(
           )
         )
       `)
-      .in('status', ['draft', 'reviewed'])
+      .in('status', ['draft', 'reviewed', 'sent'])
       .order('generated_at', { ascending: false });
 
     if (error) throw error;

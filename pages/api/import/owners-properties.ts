@@ -13,6 +13,8 @@ interface CsvRow {
   superficie_total?: string;
   ambientes?: string;
   banos?: string;
+  id_tokko?: string;
+  url_propiedad?: string;
 }
 
 interface ImportResult {
@@ -87,6 +89,18 @@ function normalizeHeader(header: string): string {
     'rooms': 'ambientes',
     'banos': 'banos',
     'bathrooms': 'banos',
+    'id_tokko': 'id_tokko',
+    'id tokko': 'id_tokko',
+    'tokko': 'id_tokko',
+    'tokko_id': 'id_tokko',
+    'tokko id': 'id_tokko',
+    'url': 'url_propiedad',
+    'url_propiedad': 'url_propiedad',
+    'url propiedad': 'url_propiedad',
+    'url de la propiedad': 'url_propiedad',
+    'link': 'url_propiedad',
+    'pagina': 'url_propiedad',
+    'web': 'url_propiedad',
   };
   return mapping[h] || header.trim();
 }
@@ -212,9 +226,7 @@ export default async function handler(
       // Insert all properties for this owner
       for (const prop of properties) {
         try {
-          const { error: propError } = await supabase
-            .from('properties')
-            .insert({
+          const propertyData: Record<string, any> = {
               address: prop.direccion_propiedad.trim(),
               neighborhood: prop.barrio?.trim() || null,
               property_type: prop.tipo_operacion?.trim().toLowerCase() || 'sale',
@@ -225,7 +237,18 @@ export default async function handler(
               owner_id: ownerData.id,
               status: 'active',
               reports_enabled: true,
-            });
+            };
+
+          if (prop.id_tokko?.trim()) {
+            propertyData.tokko_id = prop.id_tokko.trim();
+          }
+          if (prop.url_propiedad?.trim()) {
+            propertyData.web_url = prop.url_propiedad.trim();
+          }
+
+          const { error: propError } = await supabase
+            .from('properties')
+            .insert(propertyData);
 
           if (propError) {
             throw new Error(propError.message);

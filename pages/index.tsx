@@ -27,6 +27,16 @@ export default function Home() {
           }}>
           Importar Propietarios
         </Link>
+        <Link href="/vincular"
+          style={{
+            padding: '10px 20px',
+            background: '#6366f1',
+            color: 'white',
+            borderRadius: '5px',
+            textDecoration: 'none'
+          }}>
+          Vincular con Tokko
+        </Link>
       </div>
     </div>
   );

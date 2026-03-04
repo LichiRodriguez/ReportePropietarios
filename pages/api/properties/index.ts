@@ -43,32 +43,37 @@ export default async function handler(
   }
 
   if (req.method === 'POST') {
-    const { address, neighborhood, property_type, price, tokko_id, web_url } = req.body;
+    try {
+      const { address, neighborhood, property_type, price, tokko_id, web_url } = req.body || {};
 
-    if (!address) {
-      return res.status(400).json({ error: 'La dirección es obligatoria' });
+      if (!address) {
+        return res.status(400).json({ error: 'La dirección es obligatoria' });
+      }
+
+      const { data, error } = await supabase
+        .from('properties')
+        .insert({
+          address,
+          neighborhood: neighborhood || null,
+          property_type: property_type || 'sale',
+          price: price || null,
+          tokko_id: tokko_id || null,
+          web_url: web_url || null,
+          status: 'active',
+          reports_enabled: true,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+
+      return res.status(201).json({ property: data });
+    } catch (err: any) {
+      console.error('Error creating property:', err);
+      return res.status(500).json({ error: err.message || 'Error interno al crear la propiedad' });
     }
-
-    const { data, error } = await supabase
-      .from('properties')
-      .insert({
-        address,
-        neighborhood: neighborhood || null,
-        property_type: property_type || 'sale',
-        price: price || null,
-        tokko_id: tokko_id || null,
-        web_url: web_url || null,
-        status: 'active',
-        reports_enabled: true,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    return res.status(201).json({ property: data });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

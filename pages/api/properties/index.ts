@@ -5,42 +5,71 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data, error } = await supabase
-    .from('properties')
-    .select(`
-      id,
-      address,
-      neighborhood,
-      property_type,
-      price,
-      status,
-      tokko_id,
-      tokko_data,
-      web_url,
-      synced_at,
-      owner_id,
-      owners:owner_id (
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('properties')
+      .select(`
         id,
-        name,
-        phone,
-        whatsapp,
-        email
-      )
-    `)
-    .order('created_at', { ascending: false });
+        address,
+        neighborhood,
+        property_type,
+        price,
+        status,
+        tokko_id,
+        tokko_data,
+        web_url,
+        synced_at,
+        owner_id,
+        owners:owner_id (
+          id,
+          name,
+          phone,
+          whatsapp,
+          email
+        )
+      `)
+      .order('created_at', { ascending: false });
 
-  if (error) {
-    return res.status(500).json({ error: error.message });
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json({ properties: data });
   }
 
-  return res.status(200).json({ properties: data });
+  if (req.method === 'POST') {
+    const { address, neighborhood, property_type, price, tokko_id, web_url } = req.body;
+
+    if (!address) {
+      return res.status(400).json({ error: 'La dirección es obligatoria' });
+    }
+
+    const { data, error } = await supabase
+      .from('properties')
+      .insert({
+        address,
+        neighborhood: neighborhood || null,
+        property_type: property_type || 'sale',
+        price: price || null,
+        tokko_id: tokko_id || null,
+        web_url: web_url || null,
+        status: 'active',
+        reports_enabled: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(201).json({ property: data });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
 }

@@ -1,6 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PropertyMetricsService } from './propertyMetricsService';
 import { MarketAnalysisService } from './marketAnalysisService';
+import { TokkobrokerService } from './tokkobrokerService';
+import { GoogleAnalyticsService } from './googleAnalyticsService';
 
 interface GenerationOptions {
   month?: Date;
@@ -103,7 +105,7 @@ export class ReportGenerationService {
       return existingReport.id;
     }
 
-    const [metrics, marketData, similarProperties] = await Promise.all([
+    let [metrics, marketData, similarProperties] = await Promise.all([
       this.metricsService.getPropertyMetrics(propertyId, month),
       this.marketService.comparePropertyToMarket(propertyId),
       this.marketService.getSimilarProperties(propertyId, month).catch(err => {
@@ -111,6 +113,86 @@ export class ReportGenerationService {
         return null;
       }),
     ]);
+
+    // If no metrics in DB, fetch from external sources
+    const hasNoMetrics = metrics.total_views === 0 && metrics.leads_count === 0
+      && metrics.favorites_count === 0 && metrics.visit_requests === 0;
+
+    const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+    const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+    // Fetch from Tokko if available
+    if (hasNoMetrics && property.tokko_id) {
+      const tokko = new TokkobrokerService();
+      if (tokko.isConfigured()) {
+        const tokkoMetrics = await tokko.getPropertyMetrics(
+          property.tokko_id,
+          startOfMonth,
+          endOfMonth
+        );
+
+        if (tokkoMetrics) {
+          metrics = {
+            ...metrics,
+            total_views: tokkoMetrics.views || 0,
+            leads_count: tokkoMetrics.contacts || 0,
+            favorites_count: tokkoMetrics.favorites || 0,
+          };
+          console.log(`Fetched Tokko metrics for property ${propertyId}: views=${tokkoMetrics.views}, contacts=${tokkoMetrics.contacts}, favorites=${tokkoMetrics.favorites}`);
+
+          // Also save to property_metrics so future queries find it
+          try {
+            await this.supabase.from('property_metrics').insert({
+              property_id: propertyId,
+              date: startOfMonth.toISOString().split('T')[0],
+              views: tokkoMetrics.views || 0,
+              leads: tokkoMetrics.contacts || 0,
+              favorites: tokkoMetrics.favorites || 0,
+              unique_visitors: 0,
+              visit_requests: 0,
+              phone_clicks: 0,
+              whatsapp_clicks: 0,
+              email_inquiries: 0,
+              avg_time_on_page: 0,
+              portal_views: {},
+            });
+          } catch (saveErr) {
+            console.warn('Could not save Tokko metrics to DB:', saveErr);
+          }
+        }
+      }
+    }
+
+    // Fetch from Google Analytics using the property's web_url
+    if (property.web_url) {
+      try {
+        const ga = new GoogleAnalyticsService();
+        if (ga.isConfigured()) {
+          const gaMetrics = await ga.getMetricsByPageUrl(
+            property.web_url,
+            startOfMonth,
+            endOfMonth
+          );
+
+          if (gaMetrics) {
+            // Add GA website views to total (don't overwrite Tokko data, complement it)
+            metrics = {
+              ...metrics,
+              total_views: metrics.total_views + gaMetrics.pageviews,
+              unique_visitors: metrics.unique_visitors + gaMetrics.unique_visitors,
+              avg_time_on_page: gaMetrics.avg_time_on_page || metrics.avg_time_on_page,
+              portal_views: {
+                ...metrics.portal_views,
+                website: gaMetrics.pageviews,
+              },
+            };
+            console.log(`Fetched GA metrics for property ${propertyId} (${property.web_url}): pageviews=${gaMetrics.pageviews}, users=${gaMetrics.unique_visitors}`);
+          }
+        }
+      } catch (gaErr) {
+        console.warn('Could not fetch Google Analytics metrics:', gaErr);
+      }
+    }
 
     const metricsComparison = await this.metricsService.getMetricsComparison(propertyId, month);
 
@@ -151,6 +233,38 @@ export class ReportGenerationService {
     if (insertError) throw insertError;
 
     return report.id;
+  }
+
+  async deleteExistingReport(propertyId: string, month: Date): Promise<void> {
+    const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+    const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+    const { error } = await this.supabase
+      .from('monthly_property_reports')
+      .delete()
+      .eq('property_id', propertyId)
+      .gte('report_month', startOfMonth.toISOString())
+      .lte('report_month', endOfMonth.toISOString());
+
+    if (error) {
+      console.warn('Error deleting existing report:', error);
+    }
+  }
+
+  async deleteExistingReportsForMonth(month?: Date): Promise<void> {
+    const m = month || this.getPreviousMonth();
+    const startOfMonth = new Date(m.getFullYear(), m.getMonth(), 1);
+    const endOfMonth = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+
+    const { error } = await this.supabase
+      .from('monthly_property_reports')
+      .delete()
+      .gte('report_month', startOfMonth.toISOString())
+      .lte('report_month', endOfMonth.toISOString());
+
+    if (error) {
+      console.warn('Error deleting existing reports:', error);
+    }
   }
 
   private async checkExistingReport(propertyId: string, month: Date): Promise<any | null> {

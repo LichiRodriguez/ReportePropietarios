@@ -9,7 +9,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { property_id, month } = req.body;
+  const { property_id, month, force } = req.body;
 
   try {
     const service = new ReportGenerationService(
@@ -20,6 +20,12 @@ export default async function handler(
 
     if (property_id) {
       const reportMonth = month ? new Date(month) : undefined;
+
+      // If force=true, delete existing report for this property+month first
+      if (force) {
+        await service.deleteExistingReport(property_id, reportMonth || new Date());
+      }
+
       const reportId = await service.generatePropertyReport(
         property_id,
         reportMonth || new Date()
@@ -30,6 +36,11 @@ export default async function handler(
         report_id: reportId
       });
     } else {
+      // If force=true, delete all existing reports for the month before regenerating
+      if (force) {
+        await service.deleteExistingReportsForMonth(month ? new Date(month) : undefined);
+      }
+
       const result = await service.generateMonthlyReports({
         month: month ? new Date(month) : undefined
       });

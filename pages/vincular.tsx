@@ -161,13 +161,13 @@ export default function VincularPage() {
     }
   };
 
-  const safeJson = async (res: Response) => {
+  const safeJson = async (res: Response, url: string) => {
     const text = await res.text();
-    if (!text) throw new Error(`El servidor respondió vacío (status ${res.status})`);
+    if (!text) throw new Error(`El servidor respondió vacío (status ${res.status}) en ${url}`);
     try {
       return JSON.parse(text);
     } catch {
-      throw new Error(`Respuesta inválida del servidor: ${text.slice(0, 200)}`);
+      throw new Error(`Respuesta inválida del servidor (status ${res.status}) en ${url}: ${text.slice(0, 200)}`);
     }
   };
 
@@ -188,11 +188,12 @@ export default function VincularPage() {
         }),
       });
 
-      const createData = await safeJson(createRes);
+      const createData = await safeJson(createRes, '/api/properties');
       if (!createRes.ok) throw new Error(createData.error || 'Error al crear la propiedad');
 
       // Now link it to sync Tokko data
-      const linkRes = await fetch(`/api/properties/${createData.property.id}/link`, {
+      const linkUrl = `/api/properties/${createData.property.id}/link`;
+      const linkRes = await fetch(linkUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -201,7 +202,7 @@ export default function VincularPage() {
         }),
       });
 
-      const linkData = await safeJson(linkRes);
+      const linkData = await safeJson(linkRes, linkUrl);
       if (!linkRes.ok) throw new Error(linkData.error || 'Error al vincular la propiedad');
 
       setMessage({ type: 'success', text: `Propiedad "${tokko.address}" creada y vinculada correctamente.` });

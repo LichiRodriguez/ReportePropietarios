@@ -161,6 +161,16 @@ export default function VincularPage() {
     }
   };
 
+  const safeJson = async (res: Response) => {
+    const text = await res.text();
+    if (!text) throw new Error(`El servidor respondió vacío (status ${res.status})`);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`Respuesta inválida del servidor: ${text.slice(0, 200)}`);
+    }
+  };
+
   const createAndLink = async (tokko: TokkoProperty) => {
     setSaving(String(tokko.id));
     setMessage(null);
@@ -178,8 +188,8 @@ export default function VincularPage() {
         }),
       });
 
-      const createData = await createRes.json();
-      if (!createRes.ok) throw new Error(createData.error);
+      const createData = await safeJson(createRes);
+      if (!createRes.ok) throw new Error(createData.error || 'Error al crear la propiedad');
 
       // Now link it to sync Tokko data
       const linkRes = await fetch(`/api/properties/${createData.property.id}/link`, {
@@ -191,8 +201,8 @@ export default function VincularPage() {
         }),
       });
 
-      const linkData = await linkRes.json();
-      if (!linkRes.ok) throw new Error(linkData.error);
+      const linkData = await safeJson(linkRes);
+      if (!linkRes.ok) throw new Error(linkData.error || 'Error al vincular la propiedad');
 
       setMessage({ type: 'success', text: `Propiedad "${tokko.address}" creada y vinculada correctamente.` });
       fetchProperties();

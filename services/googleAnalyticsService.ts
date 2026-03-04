@@ -191,6 +191,36 @@ export class GoogleAnalyticsService {
     }
   }
 
+  async getMetricsByPageUrl(
+    pageUrl: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<GAPropertyPage | null> {
+    if (!this.isConfigured()) return null;
+
+    // Extract path from full URL, or use as-is if already a path
+    let pagePath: string;
+    try {
+      const url = new URL(pageUrl);
+      pagePath = url.pathname;
+    } catch {
+      pagePath = pageUrl;
+    }
+
+    // Try exact path first, then fallback to last segment
+    const result = await this.getPropertyPageMetrics(pagePath, startDate, endDate);
+    if (result) return result;
+
+    // Try with last meaningful path segment (e.g. /propiedades/casa-en-palermo -> casa-en-palermo)
+    const segments = pagePath.split('/').filter(Boolean);
+    if (segments.length > 0) {
+      const lastSegment = segments[segments.length - 1];
+      return this.getPropertyPageMetrics(lastSegment, startDate, endDate);
+    }
+
+    return null;
+  }
+
   private formatDate(date: Date): string {
     return date.toISOString().split('T')[0];
   }

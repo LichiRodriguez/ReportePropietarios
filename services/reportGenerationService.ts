@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PropertyMetricsService } from './propertyMetricsService';
 import { MarketAnalysisService } from './marketAnalysisService';
 import { TokkobrokerService } from './tokkobrokerService';
+import { GoogleAnalyticsService } from './googleAnalyticsService';
 
 interface GenerationOptions {
   month?: Date;
@@ -113,15 +114,17 @@ export class ReportGenerationService {
       }),
     ]);
 
-    // If no metrics in DB and property has tokko_id, fetch from Tokko
+    // If no metrics in DB, fetch from external sources
     const hasNoMetrics = metrics.total_views === 0 && metrics.leads_count === 0
       && metrics.favorites_count === 0 && metrics.visit_requests === 0;
 
+    const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+    const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+    // Fetch from Tokko if available
     if (hasNoMetrics && property.tokko_id) {
       const tokko = new TokkobrokerService();
       if (tokko.isConfigured()) {
-        const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
-        const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
         const tokkoMetrics = await tokko.getPropertyMetrics(
           property.tokko_id,
           startOfMonth,
@@ -157,6 +160,37 @@ export class ReportGenerationService {
             console.warn('Could not save Tokko metrics to DB:', saveErr);
           }
         }
+      }
+    }
+
+    // Fetch from Google Analytics using the property's web_url
+    if (property.web_url) {
+      try {
+        const ga = new GoogleAnalyticsService();
+        if (ga.isConfigured()) {
+          const gaMetrics = await ga.getMetricsByPageUrl(
+            property.web_url,
+            startOfMonth,
+            endOfMonth
+          );
+
+          if (gaMetrics) {
+            // Add GA website views to total (don't overwrite Tokko data, complement it)
+            metrics = {
+              ...metrics,
+              total_views: metrics.total_views + gaMetrics.pageviews,
+              unique_visitors: metrics.unique_visitors + gaMetrics.unique_visitors,
+              avg_time_on_page: gaMetrics.avg_time_on_page || metrics.avg_time_on_page,
+              portal_views: {
+                ...metrics.portal_views,
+                website: gaMetrics.pageviews,
+              },
+            };
+            console.log(`Fetched GA metrics for property ${propertyId} (${property.web_url}): pageviews=${gaMetrics.pageviews}, users=${gaMetrics.unique_visitors}`);
+          }
+        }
+      } catch (gaErr) {
+        console.warn('Could not fetch Google Analytics metrics:', gaErr);
       }
     }
 

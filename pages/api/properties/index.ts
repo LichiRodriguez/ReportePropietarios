@@ -1,16 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { TokkobrokerService } from '../../../services/tokkobrokerService';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Allow', 'GET, POST, OPTIONS');
-    return res.status(200).end();
-  }
-
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,18 +51,36 @@ export default async function handler(
         return res.status(400).json({ error: 'La dirección es obligatoria' });
       }
 
+      // Build insert data
+      const insertData: Record<string, any> = {
+        address,
+        neighborhood: neighborhood || null,
+        property_type: property_type || 'sale',
+        price: price || null,
+        tokko_id: tokko_id || null,
+        web_url: web_url || null,
+        status: 'active',
+        reports_enabled: true,
+      };
+
+      // If tokko_id provided, fetch Tokko data and link in the same step
+      if (tokko_id) {
+        const tokko = new TokkobrokerService();
+        if (tokko.isConfigured()) {
+          const tokkoProperty = await tokko.getProperty(tokko_id);
+          if (tokkoProperty) {
+            insertData.tokko_data = tokkoProperty;
+            insertData.synced_at = new Date().toISOString();
+            if (!web_url && (tokkoProperty as any).web_url) {
+              insertData.web_url = (tokkoProperty as any).web_url;
+            }
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from('properties')
-        .insert({
-          address,
-          neighborhood: neighborhood || null,
-          property_type: property_type || 'sale',
-          price: price || null,
-          tokko_id: tokko_id || null,
-          web_url: web_url || null,
-          status: 'active',
-          reports_enabled: true,
-        })
+        .insert(insertData)
         .select()
         .single();
 

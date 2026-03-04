@@ -33,6 +33,16 @@ interface TokkoProperty {
   photos: string[];
 }
 
+interface EditForm {
+  address: string;
+  neighborhood: string;
+  price: string;
+  owner_name: string;
+  owner_phone: string;
+  tokko_id: string;
+  web_url: string;
+}
+
 export default function VincularPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [tokkoProperties, setTokkoProperties] = useState<TokkoProperty[]>([]);
@@ -40,10 +50,13 @@ export default function VincularPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTokkoId, setEditTokkoId] = useState('');
-  const [editWebUrl, setEditWebUrl] = useState('');
   const [filter, setFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+
+  // Edit modal state
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({
+    address: '', neighborhood: '', price: '', owner_name: '', owner_phone: '', tokko_id: '', web_url: '',
+  });
 
   const fetchProperties = useCallback(async () => {
     try {
@@ -73,40 +86,48 @@ export default function VincularPage() {
     fetchTokkoProperties();
   }, [fetchProperties, fetchTokkoProperties]);
 
-  const startEditing = (prop: Property) => {
-    setEditingId(prop.id);
-    setEditTokkoId(prop.tokko_id || '');
-    setEditWebUrl(prop.web_url || '');
+  const openEditModal = (prop: Property) => {
+    setEditingProperty(prop);
+    setEditForm({
+      address: prop.address || '',
+      neighborhood: prop.neighborhood || '',
+      price: prop.price ? String(prop.price) : '',
+      owner_name: prop.owners?.name || '',
+      owner_phone: prop.owners?.phone || prop.owners?.whatsapp || '',
+      tokko_id: prop.tokko_id || '',
+      web_url: prop.web_url || '',
+    });
   };
 
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditTokkoId('');
-    setEditWebUrl('');
+  const closeEditModal = () => {
+    setEditingProperty(null);
   };
 
-  const saveLink = async (propertyId: string) => {
-    setSaving(propertyId);
+  const saveEdit = async () => {
+    if (!editingProperty) return;
+    setSaving(editingProperty.id);
     setMessage(null);
 
     try {
-      const res = await fetch(`/api/properties/${propertyId}/link`, {
-        method: 'POST',
+      const res = await fetch(`/api/properties/${editingProperty.id}/edit`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tokko_id: editTokkoId || null,
-          web_url: editWebUrl || null,
+          address: editForm.address,
+          neighborhood: editForm.neighborhood,
+          price: editForm.price ? Number(editForm.price) : null,
+          owner_name: editForm.owner_name,
+          owner_phone: editForm.owner_phone,
+          tokko_id: editForm.tokko_id || null,
+          web_url: editForm.web_url || null,
         }),
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
-      if (!res.ok) {
-        throw new Error(data.error);
-      }
-
-      setMessage({ type: 'success', text: `Propiedad vinculada correctamente` });
-      setEditingId(null);
+      setMessage({ type: 'success', text: 'Propiedad actualizada correctamente' });
+      closeEditModal();
       fetchProperties();
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message });
@@ -127,10 +148,7 @@ export default function VincularPage() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error);
-      }
+      if (!res.ok) throw new Error(data.error);
 
       setMessage({ type: 'success', text: 'Datos sincronizados desde Tokko' });
       fetchProperties();
@@ -142,7 +160,6 @@ export default function VincularPage() {
   };
 
   const linkFromTokko = (tokkoId: number, tokkoAddress: string, tokkoWebUrl: string) => {
-    // Find a matching property by address similarity or let user choose
     const match = properties.find(p =>
       !p.tokko_id &&
       (p.address.toLowerCase().includes(tokkoAddress.toLowerCase().slice(0, 15)) ||
@@ -150,14 +167,15 @@ export default function VincularPage() {
     );
 
     if (match) {
-      setEditingId(match.id);
-      setEditTokkoId(String(tokkoId));
-      setEditWebUrl(tokkoWebUrl || editWebUrl);
+      openEditModal(match);
+      setEditForm(prev => ({
+        ...prev,
+        tokko_id: String(tokkoId),
+        web_url: tokkoWebUrl || prev.web_url,
+      }));
       setMessage({ type: 'success', text: `Coincidencia encontrada: "${match.address}". Confirmá para vincular.` });
     } else {
       setMessage({ type: 'error', text: `No se encontró coincidencia automática para "${tokkoAddress}". Editá manualmente la propiedad que corresponda o usá "Crear y vincular".` });
-      setEditTokkoId(String(tokkoId));
-      setEditWebUrl(tokkoWebUrl || '');
     }
   };
 
@@ -176,7 +194,6 @@ export default function VincularPage() {
     setMessage(null);
 
     try {
-      // Create and link in a single API call
       const res = await fetch('/api/properties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -280,7 +297,16 @@ export default function VincularPage() {
                 {filtered.map(prop => (
                   <tr key={prop.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={tdStyle}>
-                      <strong>{prop.owners?.name || '-'}</strong>
+                      {prop.owners?.id ? (
+                        <Link
+                          href={`/propietario/${prop.owners.id}`}
+                          style={{ color: '#0070f3', textDecoration: 'none', fontWeight: 'bold' }}
+                        >
+                          {prop.owners.name || '-'}
+                        </Link>
+                      ) : (
+                        <strong>{prop.owners?.name || '-'}</strong>
+                      )}
                       {prop.owners?.whatsapp && (
                         <div style={{ fontSize: '12px', color: '#666' }}>{prop.owners.whatsapp}</div>
                       )}
@@ -290,81 +316,41 @@ export default function VincularPage() {
                     <td style={tdStyle}>
                       {prop.price ? `USD ${prop.price.toLocaleString()}` : '-'}
                     </td>
-
-                    {editingId === prop.id ? (
-                      <>
-                        <td style={tdStyle}>
-                          <input
-                            type="text"
-                            value={editTokkoId}
-                            onChange={e => setEditTokkoId(e.target.value)}
-                            placeholder="Ej: 12345"
-                            style={inputStyle}
-                          />
-                        </td>
-                        <td style={tdStyle}>
-                          <input
-                            type="text"
-                            value={editWebUrl}
-                            onChange={e => setEditWebUrl(e.target.value)}
-                            placeholder="https://..."
-                            style={{ ...inputStyle, minWidth: '200px' }}
-                          />
-                        </td>
-                        <td style={tdStyle}>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              onClick={() => saveLink(prop.id)}
-                              disabled={saving === prop.id}
-                              style={btnSave}
-                            >
-                              {saving === prop.id ? '...' : 'Guardar'}
-                            </button>
-                            <button onClick={cancelEditing} style={btnCancel}>
-                              Cancelar
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td style={tdStyle}>
-                          {prop.tokko_id ? (
-                            <span style={{ background: '#dcfce7', padding: '2px 8px', borderRadius: '4px', fontSize: '13px' }}>
-                              {prop.tokko_id}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#94a3b8' }}>-</span>
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {prop.web_url ? (
-                            <a href={prop.web_url} target="_blank" rel="noopener noreferrer"
-                              style={{ color: '#0070f3', fontSize: '13px', wordBreak: 'break-all' }}>
-                              {prop.web_url.length > 40 ? prop.web_url.slice(0, 40) + '...' : prop.web_url}
-                            </a>
-                          ) : (
-                            <span style={{ color: '#94a3b8' }}>-</span>
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button onClick={() => startEditing(prop)} style={btnEdit}>
-                              Editar
-                            </button>
-                            {prop.tokko_id && tokkoConfigured && (
-                              <button
-                                onClick={() => syncProperty(prop.id)}
-                                disabled={saving === prop.id}
-                                style={btnSync}
-                              >
-                                {saving === prop.id ? '...' : 'Sync'}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </>
-                    )}
+                    <td style={tdStyle}>
+                      {prop.tokko_id ? (
+                        <span style={{ background: '#dcfce7', padding: '2px 8px', borderRadius: '4px', fontSize: '13px' }}>
+                          {prop.tokko_id}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>-</span>
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      {prop.web_url ? (
+                        <a href={prop.web_url} target="_blank" rel="noopener noreferrer"
+                          style={{ color: '#0070f3', fontSize: '13px', wordBreak: 'break-all' }}>
+                          {prop.web_url.length > 40 ? prop.web_url.slice(0, 40) + '...' : prop.web_url}
+                        </a>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>-</span>
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => openEditModal(prop)} style={btnEdit}>
+                          Editar
+                        </button>
+                        {prop.tokko_id && tokkoConfigured && (
+                          <button
+                            onClick={() => syncProperty(prop.id)}
+                            disabled={saving === prop.id}
+                            style={btnSync}
+                          >
+                            {saving === prop.id ? '...' : 'Sync'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -454,6 +440,128 @@ export default function VincularPage() {
           )}
         </>
       )}
+
+      {/* Edit Modal */}
+      {editingProperty && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeEditModal(); }}
+        >
+          <div style={{
+            background: 'white', borderRadius: '12px', padding: '28px', width: '500px', maxWidth: '95vw',
+            maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{ margin: '0 0 20px', fontSize: '18px' }}>Editar Propiedad</h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={labelStyle}>Dirección</label>
+                <input
+                  type="text"
+                  value={editForm.address}
+                  onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                  style={modalInputStyle}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Barrio</label>
+                  <input
+                    type="text"
+                    value={editForm.neighborhood}
+                    onChange={e => setEditForm(f => ({ ...f, neighborhood: e.target.value }))}
+                    placeholder="Ej: Palermo"
+                    style={modalInputStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Precio (USD)</label>
+                  <input
+                    type="number"
+                    value={editForm.price}
+                    onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))}
+                    placeholder="Ej: 150000"
+                    style={modalInputStyle}
+                  />
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '14px', marginTop: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '10px' }}>
+                  Datos del propietario
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Nombre</label>
+                    <input
+                      type="text"
+                      value={editForm.owner_name}
+                      onChange={e => setEditForm(f => ({ ...f, owner_name: e.target.value }))}
+                      style={modalInputStyle}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Teléfono</label>
+                    <input
+                      type="text"
+                      value={editForm.owner_phone}
+                      onChange={e => setEditForm(f => ({ ...f, owner_phone: e.target.value }))}
+                      placeholder="Ej: 1155667788"
+                      style={modalInputStyle}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '14px', marginTop: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '10px' }}>
+                  Vinculación
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>ID Tokko</label>
+                    <input
+                      type="text"
+                      value={editForm.tokko_id}
+                      onChange={e => setEditForm(f => ({ ...f, tokko_id: e.target.value }))}
+                      placeholder="Ej: 12345"
+                      style={modalInputStyle}
+                    />
+                  </div>
+                  <div style={{ flex: 2 }}>
+                    <label style={labelStyle}>URL Propiedad</label>
+                    <input
+                      type="text"
+                      value={editForm.web_url}
+                      onChange={e => setEditForm(f => ({ ...f, web_url: e.target.value }))}
+                      placeholder="https://..."
+                      style={modalInputStyle}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
+              <button onClick={closeEditModal} style={btnCancel}>
+                Cancelar
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={saving === editingProperty.id}
+                style={btnSave}
+              >
+                {saving === editingProperty.id ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -466,8 +574,13 @@ const tdStyle: React.CSSProperties = {
   padding: '10px 8px', verticalAlign: 'top',
 };
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '6px 8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px',
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px',
+};
+
+const modalInputStyle: React.CSSProperties = {
+  width: '100%', padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '6px',
+  fontSize: '14px', boxSizing: 'border-box',
 };
 
 const btnEdit: React.CSSProperties = {
@@ -476,13 +589,13 @@ const btnEdit: React.CSSProperties = {
 };
 
 const btnSave: React.CSSProperties = {
-  padding: '4px 12px', background: '#0070f3', color: 'white', border: 'none',
-  borderRadius: '4px', cursor: 'pointer', fontSize: '13px',
+  padding: '8px 20px', background: '#0070f3', color: 'white', border: 'none',
+  borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
 };
 
 const btnCancel: React.CSSProperties = {
-  padding: '4px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1',
-  borderRadius: '4px', cursor: 'pointer', fontSize: '13px',
+  padding: '8px 20px', background: '#f1f5f9', border: '1px solid #cbd5e1',
+  borderRadius: '6px', cursor: 'pointer', fontSize: '14px',
 };
 
 const btnSync: React.CSSProperties = {

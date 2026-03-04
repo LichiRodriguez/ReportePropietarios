@@ -3,6 +3,7 @@ import { generateWhatsAppUrl } from '../lib/whatsapp';
 
 interface Report {
   id: string;
+  property_id: string;
   status: string;
   report_month: string;
   generated_at: string;
@@ -30,6 +31,7 @@ export default function ReportsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'draft' | 'reviewed' | 'sent'>('all');
 
   useEffect(() => {
@@ -83,13 +85,13 @@ export default function ReportsPanel() {
     window.open(`/api/reports/${reportId}/preview`, '_blank');
   };
 
-  const handleGenerateReports = async () => {
+  const handleGenerateReports = async (force = false) => {
     try {
       setLoading(true);
       const res = await fetch('/api/reports/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ force }),
       });
 
       if (!res.ok) throw new Error('Failed to generate reports');
@@ -101,6 +103,30 @@ export default function ReportsPanel() {
       alert(`Error generando reportes: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegenerate = async (report: Report) => {
+    if (!confirm(`¿Regenerar el reporte de "${report.properties?.address}"? Se va a borrar el actual y crear uno nuevo con métricas de Tokko.`)) return;
+
+    setRegenerating(report.id);
+    try {
+      const res = await fetch('/api/reports/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_id: report.property_id,
+          month: report.report_month,
+          force: true,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Error al regenerar');
+      await fetchReports();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -145,20 +171,38 @@ export default function ReportsPanel() {
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Panel de Reportes</h1>
-        <button
-          onClick={handleGenerateReports}
-          style={{
-            padding: '10px 20px',
-            background: '#1e40af',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 600,
-          }}
-        >
-          Generar Reportes
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {reports.length > 0 && (
+            <button
+              onClick={() => handleGenerateReports(true)}
+              style={{
+                padding: '10px 20px',
+                background: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Regenerar Todos
+            </button>
+          )}
+          <button
+            onClick={() => handleGenerateReports(false)}
+            style={{
+              padding: '10px 20px',
+              background: '#1e40af',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Generar Reportes
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
@@ -241,6 +285,21 @@ export default function ReportsPanel() {
               </div>
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => handleRegenerate(report)}
+                  disabled={regenerating === report.id}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #fca5a5',
+                    borderRadius: '6px',
+                    background: '#fef2f2',
+                    color: '#dc2626',
+                    cursor: regenerating === report.id ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  {regenerating === report.id ? 'Regenerando...' : 'Regenerar'}
+                </button>
                 <button
                   onClick={() => handlePreview(report.id)}
                   style={{

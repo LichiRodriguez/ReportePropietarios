@@ -5,45 +5,51 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  if (req.method === 'GET') {
-    const { data, error } = await supabase
-      .from('properties')
-      .select(`
-        id,
-        address,
-        neighborhood,
-        property_type,
-        price,
-        status,
-        tokko_id,
-        tokko_data,
-        web_url,
-        synced_at,
-        owner_id,
-        owners:owner_id (
-          id,
-          name,
-          phone,
-          whatsapp,
-          email
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    return res.status(200).json({ properties: data });
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
+    return res.status(200).end();
   }
 
-  if (req.method === 'POST') {
-    try {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('properties')
+        .select(`
+          id,
+          address,
+          neighborhood,
+          property_type,
+          price,
+          status,
+          tokko_id,
+          tokko_data,
+          web_url,
+          synced_at,
+          owner_id,
+          owners:owner_id (
+            id,
+            name,
+            phone,
+            whatsapp,
+            email
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+
+      return res.status(200).json({ properties: data });
+    }
+
+    if (req.method === 'POST') {
       const { address, neighborhood, property_type, price, tokko_id, web_url } = req.body || {};
 
       if (!address) {
@@ -70,11 +76,11 @@ export default async function handler(
       }
 
       return res.status(201).json({ property: data });
-    } catch (err: any) {
-      console.error('Error creating property:', err);
-      return res.status(500).json({ error: err.message || 'Error interno al crear la propiedad' });
     }
-  }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: `Method ${req.method} not allowed` });
+  } catch (err: any) {
+    console.error('API /api/properties error:', err);
+    return res.status(500).json({ error: err.message || 'Error interno del servidor' });
+  }
 }

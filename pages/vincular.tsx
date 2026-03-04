@@ -155,9 +155,51 @@ export default function VincularPage() {
       setEditWebUrl(tokkoWebUrl || editWebUrl);
       setMessage({ type: 'success', text: `Coincidencia encontrada: "${match.address}". Confirmá para vincular.` });
     } else {
-      setMessage({ type: 'error', text: `No se encontró coincidencia automática para "${tokkoAddress}". Editá manualmente la propiedad que corresponda.` });
+      setMessage({ type: 'error', text: `No se encontró coincidencia automática para "${tokkoAddress}". Editá manualmente la propiedad que corresponda o usá "Crear y vincular".` });
       setEditTokkoId(String(tokkoId));
       setEditWebUrl(tokkoWebUrl || '');
+    }
+  };
+
+  const createAndLink = async (tokko: TokkoProperty) => {
+    setSaving(String(tokko.id));
+    setMessage(null);
+
+    try {
+      // Create local property from Tokko data
+      const createRes = await fetch('/api/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: tokko.address,
+          price: tokko.price || null,
+          tokko_id: String(tokko.id),
+          web_url: tokko.web_url || null,
+        }),
+      });
+
+      const createData = await createRes.json();
+      if (!createRes.ok) throw new Error(createData.error);
+
+      // Now link it to sync Tokko data
+      const linkRes = await fetch(`/api/properties/${createData.property.id}/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokko_id: String(tokko.id),
+          web_url: tokko.web_url || null,
+        }),
+      });
+
+      const linkData = await linkRes.json();
+      if (!linkRes.ok) throw new Error(linkData.error);
+
+      setMessage({ type: 'success', text: `Propiedad "${tokko.address}" creada y vinculada correctamente.` });
+      fetchProperties();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setSaving(null);
     }
   };
 
@@ -333,9 +375,21 @@ export default function VincularPage() {
           </div>
 
           {filtered.length === 0 && (
-            <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>
-              No hay propiedades{filter !== 'all' ? ` ${filter === 'linked' ? 'vinculadas' : 'sin vincular'}` : ''}.
-            </p>
+            <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>
+              <p>No hay propiedades{filter !== 'all' ? ` ${filter === 'linked' ? 'vinculadas' : 'sin vincular'}` : ''}.</p>
+              {properties.length === 0 && tokkoProperties.length > 0 && (
+                <p style={{ fontSize: '14px', marginTop: '8px' }}>
+                  Usá el botón <strong>&quot;Crear y vincular&quot;</strong> en las propiedades de Tokko de abajo para crear propiedades directamente.
+                  <br />
+                  También podés <Link href="/import" style={{ color: '#0070f3' }}>importar propiedades desde un CSV</Link>.
+                </p>
+              )}
+              {properties.length === 0 && tokkoProperties.length === 0 && (
+                <p style={{ fontSize: '14px', marginTop: '8px' }}>
+                  <Link href="/import" style={{ color: '#0070f3' }}>Importá propiedades desde un CSV</Link> para empezar.
+                </p>
+              )}
+            </div>
           )}
 
           {/* Tokko properties section */}
@@ -361,16 +415,25 @@ export default function VincularPage() {
                       <div style={{ fontSize: '13px', marginTop: '4px' }}>
                         {tp.currency} {tp.price?.toLocaleString()}
                       </div>
-                      <div style={{ marginTop: '8px' }}>
+                      <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {alreadyLinked ? (
                           <span style={{ color: '#16a34a', fontSize: '13px' }}>Ya vinculada</span>
                         ) : (
-                          <button
-                            onClick={() => linkFromTokko(tp.id, tp.address, tp.web_url)}
-                            style={btnLink}
-                          >
-                            Vincular
-                          </button>
+                          <>
+                            <button
+                              onClick={() => linkFromTokko(tp.id, tp.address, tp.web_url)}
+                              style={btnLink}
+                            >
+                              Vincular
+                            </button>
+                            <button
+                              onClick={() => createAndLink(tp)}
+                              disabled={saving === String(tp.id)}
+                              style={btnCreate}
+                            >
+                              {saving === String(tp.id) ? 'Creando...' : 'Crear y vincular'}
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -432,5 +495,10 @@ const btnSync: React.CSSProperties = {
 
 const btnLink: React.CSSProperties = {
   padding: '4px 12px', background: '#6366f1', color: 'white', border: 'none',
+  borderRadius: '4px', cursor: 'pointer', fontSize: '13px',
+};
+
+const btnCreate: React.CSSProperties = {
+  padding: '4px 12px', background: '#0891b2', color: 'white', border: 'none',
   borderRadius: '4px', cursor: 'pointer', fontSize: '13px',
 };

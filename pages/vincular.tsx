@@ -176,8 +176,8 @@ export default function VincularPage() {
     setMessage(null);
 
     try {
-      // Create local property from Tokko data
-      const createRes = await fetch('/api/properties', {
+      // Create and link in a single API call
+      const res = await fetch('/api/properties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,22 +188,8 @@ export default function VincularPage() {
         }),
       });
 
-      const createData = await safeJson(createRes, '/api/properties');
-      if (!createRes.ok) throw new Error(createData.error || 'Error al crear la propiedad');
-
-      // Now link it to sync Tokko data
-      const linkUrl = `/api/properties/${createData.property.id}/link`;
-      const linkRes = await fetch(linkUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tokko_id: String(tokko.id),
-          web_url: tokko.web_url || null,
-        }),
-      });
-
-      const linkData = await safeJson(linkRes, linkUrl);
-      if (!linkRes.ok) throw new Error(linkData.error || 'Error al vincular la propiedad');
+      const data = await safeJson(res, '/api/properties');
+      if (!res.ok) throw new Error(data.error || 'Error al crear la propiedad');
 
       setMessage({ type: 'success', text: `Propiedad "${tokko.address}" creada y vinculada correctamente.` });
       fetchProperties();

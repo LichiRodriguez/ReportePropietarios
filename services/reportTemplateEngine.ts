@@ -99,8 +99,9 @@ export class ReportTemplateEngine {
     const marketData = report.market_data || {};
     const similarData = marketData.similar_properties || {};
 
-    const tokkoProperty = report.tokko_property || null;
-    const tokkoStats = report.tokko_stats || null;
+    // Tokko data lives inside market_data JSONB (no separate columns needed)
+    const tokkoProperty = marketData.tokko_property || report.tokko_property || null;
+    const tokkoStats = marketData.tokko_stats || report.tokko_stats || null;
 
     // Determinar foto principal
     let mainPhoto = null;

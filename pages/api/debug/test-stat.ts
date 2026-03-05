@@ -83,89 +83,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       results.page_scrape_error = e.message;
     }
 
-    // 3. Try the API endpoint that returned 500 - with different methods and headers
-    const apiEndpoint = `/portals/api/v1/publication/${pubId}/stat/`;
-    results.api_stat_attempts = [];
+    // 3. THE KEY ENDPOINT: /portals/{portal_id}/publication/{pub_id}/stats_detail/
+    // Found by scraping the JS code: loadPublicationStatistics makes AJAX GET to this URL
+    results.stats_detail = {};
 
-    // GET without X-Requested-With
     try {
-      const r = await fetch(`https://www.tokkobroker.com${apiEndpoint}`, {
-        headers: { 'Cookie': sessionCookie, 'Referer': baseHeaders['Referer'] },
-        redirect: 'follow',
-      });
-      const t = await r.text();
-      results.api_stat_attempts.push({ method: 'GET (no XHR)', status: r.status, body: t.substring(0, 1000) });
-    } catch (e: any) {
-      results.api_stat_attempts.push({ method: 'GET (no XHR)', error: e.message });
-    }
-
-    // POST with CSRF
-    try {
-      const r = await fetch(`https://www.tokkobroker.com${apiEndpoint}`, {
-        method: 'POST',
-        headers: {
-          ...baseHeaders,
-          'X-CSRFToken': csrfToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ portal_id: portalId, publication_id: pubId }),
-        redirect: 'follow',
-      });
-      const t = await r.text();
-      results.api_stat_attempts.push({ method: 'POST (JSON+CSRF)', status: r.status, body: t.substring(0, 1000) });
-    } catch (e: any) {
-      results.api_stat_attempts.push({ method: 'POST (JSON+CSRF)', error: e.message });
-    }
-
-    // GET with portal_id param
-    try {
-      const r = await fetch(`https://www.tokkobroker.com${apiEndpoint}?portal_id=${portalId}`, {
+      const statsUrl = `https://www.tokkobroker.com/portals/${portalId}/publication/${pubId}/stats_detail/`;
+      const r = await fetch(statsUrl, {
         headers: baseHeaders,
         redirect: 'follow',
       });
-      const t = await r.text();
-      results.api_stat_attempts.push({ method: 'GET (?portal_id)', status: r.status, body: t.substring(0, 1000) });
+      const contentType = r.headers.get('content-type') || '';
+      const text = await r.text();
+      results.stats_detail = {
+        url: statsUrl,
+        status: r.status,
+        contentType,
+        bodyFull: text.substring(0, 8000),
+      };
+
+      // If it's JSON, try to parse
+      if (contentType.includes('json') && r.status === 200) {
+        try {
+          results.stats_detail.parsed = JSON.parse(text);
+        } catch {
+          // not JSON
+        }
+      }
     } catch (e: any) {
-      results.api_stat_attempts.push({ method: 'GET (?portal_id)', error: e.message });
+      results.stats_detail = { error: e.message };
     }
 
-    // Try the non-API version with POST
+    // Also try without trailing slash
     try {
-      const r = await fetch(`https://www.tokkobroker.com/portals/${portalId}/publication/${pubId}/stat/`, {
-        method: 'POST',
-        headers: {
-          ...baseHeaders,
-          'X-CSRFToken': csrfToken,
-        },
-        redirect: 'follow',
-      });
-      const t = await r.text();
-      results.api_stat_attempts.push({
-        method: 'POST /portals/{portal}/publication/{pub}/stat/',
-        status: r.status,
-        contentType: r.headers.get('content-type'),
-        body: t.substring(0, 2000),
-      });
-    } catch (e: any) {
-      results.api_stat_attempts.push({ method: 'POST non-api', error: e.message });
-    }
-
-    // Try GET to /portals/{portal}/publication/{pub}/stat/ without XHR
-    try {
-      const r = await fetch(`https://www.tokkobroker.com/portals/${portalId}/publication/${pubId}/stat/`, {
-        headers: { 'Cookie': sessionCookie },
-        redirect: 'follow',
-      });
-      const ct = r.headers.get('content-type') || '';
-      const t = await r.text();
-      results.api_stat_attempts.push({
-        method: 'GET /portals/{portal}/publication/{pub}/stat/ (browser)',
-        status: r.status,
-        contentType: ct,
-        body: t.substring(0, 2000),
-      });
-    } catch (e: any) {
-      results.api_stat_attempts.push({ method: 'GET non-api browser', error: e.message });
+      const r2 = await fetch(
+        `https://www.tokkobroker.com/portals/${portalId}/publication/${pubId}/stats_detail`,
+        { headers: baseHeaders, redirect: 'follow' }
+      );
+      if (r2.status !== 404) {
+        const t2 = await r2.text();
+        results.stats_detail_no_slash = {
+          status: r2.status,
+          contentType: r2.headers.get('content-type'),
+          body: t2.substring(0, 5000),
+        };
+      }
+    } catch {
+      // skip
     }
 
     return res.status(200).json(results);

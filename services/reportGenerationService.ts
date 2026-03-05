@@ -118,6 +118,21 @@ export class ReportGenerationService {
       this.fetchTokkoStats(property.tokko_id, month),
     ]);
 
+    // Hidratar metrics desde Tokko dashboard stats cuando la DB no tiene datos
+    const hasNoMetrics = metrics.total_views === 0 && metrics.leads_count === 0
+      && metrics.favorites_count === 0 && metrics.visit_requests === 0;
+
+    if (hasNoMetrics && tokkoStats) {
+      metrics = {
+        ...metrics,
+        total_views: tokkoStats.emails_enviados + tokkoStats.contactos_interesados + tokkoStats.whatsapp_enviados,
+        leads_count: tokkoStats.contactos_interesados,
+        email_inquiries: tokkoStats.emails_enviados,
+        whatsapp_clicks: tokkoStats.whatsapp_enviados,
+      };
+      console.log(`Hydrated metrics from Tokko dashboard stats for property ${propertyId}: leads=${tokkoStats.contactos_interesados}, emails=${tokkoStats.emails_enviados}, whatsapp=${tokkoStats.whatsapp_enviados}`);
+    }
+
     const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
     const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
 

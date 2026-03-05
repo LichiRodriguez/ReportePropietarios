@@ -51,6 +51,31 @@ export interface TokkoChartStats {
   pie_charts: { data: string; name: string }[];
 }
 
+export interface TokkoPortalStats {
+  portal_name: string;
+  portal_id: string;
+  publication_id: number;
+  publication_url: string;
+  exposure: {
+    total: number;
+    segment: number;
+    score: string;
+  };
+  views: {
+    total: number;
+    segment: number;
+    score: string;
+  };
+  interested: {
+    total: number;
+    segment: number;
+    form_contacts: number;
+    seen_phone_contacts: number;
+    whatsapp_contacts: number;
+  };
+  performance: string;
+}
+
 export interface TokkoPropertyStats {
   emails_enviados: number;
   whatsapp_enviados: number;
@@ -305,6 +330,84 @@ export class TokkobrokerService {
     }
 
     return stats;
+  }
+
+  // --- Estadísticas de portales (ZonaProp, etc.) ---
+
+  // Mapa de portal_id a nombre legible
+  private static PORTAL_NAMES: Record<string, string> = {
+    '4': 'ZonaProp',
+    '2': 'Red Navent',
+  };
+
+  async getPortalStats(tokkoPropertyId: number): Promise<TokkoPortalStats[]> {
+    if (!this.isSessionConfigured()) return [];
+
+    try {
+      // 1. Obtener publicaciones de la propiedad en ZonaProp (portal_id=4)
+      const pubResponse = await this.fetchDashboard(
+        `/portals/api/v1/publication/?property_id=${tokkoPropertyId}&portal_id=4&limit=100`
+      );
+
+      if (!pubResponse.ok) {
+        console.warn(`Could not fetch publications for property ${tokkoPropertyId}`);
+        return [];
+      }
+
+      const pubData = await pubResponse.json();
+      const publications = pubData.objects || [];
+      const results: TokkoPortalStats[] = [];
+
+      // 2. Para cada publicación con stats, obtener stats_detail
+      for (const pub of publications) {
+        if (!pub.has_stats) continue;
+
+        try {
+          const statsResponse = await this.fetchDashboard(
+            `/portals/${pub.portal_id}/publication/${pub.id}/stats_detail/`
+          );
+
+          if (!statsResponse.ok) continue;
+
+          const statsData = await statsResponse.json();
+          const stats = statsData.stats;
+
+          if (!stats) continue;
+
+          results.push({
+            portal_name: TokkobrokerService.PORTAL_NAMES[pub.portal_id] || `Portal ${pub.portal_id}`,
+            portal_id: pub.portal_id,
+            publication_id: pub.id,
+            publication_url: Array.isArray(pub.url) ? pub.url[0] || '' : pub.url || '',
+            exposure: {
+              total: stats.exposure?.total || 0,
+              segment: stats.exposure?.segment || 0,
+              score: stats.exposure?.view_score || '',
+            },
+            views: {
+              total: stats.views?.total || 0,
+              segment: stats.views?.segment || 0,
+              score: stats.views?.interested_score || '',
+            },
+            interested: {
+              total: stats.interested?.total || 0,
+              segment: stats.interested?.segment || 0,
+              form_contacts: stats.interested?.form_contacts || 0,
+              seen_phone_contacts: stats.interested?.seen_phone_contacts || 0,
+              whatsapp_contacts: stats.interested?.whatsapp_contacts || 0,
+            },
+            performance: stats.performance || '',
+          });
+        } catch (err) {
+          console.error(`Error fetching stats_detail for publication ${pub.id}:`, err);
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error(`Error fetching portal stats for property ${tokkoPropertyId}:`, error);
+      return [];
+    }
   }
 
   // --- API pública de Tokko (datos de propiedades) ---

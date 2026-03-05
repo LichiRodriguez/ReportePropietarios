@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PropertyMetricsService } from './propertyMetricsService';
 import { MarketAnalysisService } from './marketAnalysisService';
-import { TokkobrokerService, TokkoPropertyStats } from './tokkobrokerService';
+import { TokkobrokerService, TokkoPropertyStats, TokkoPortalStats } from './tokkobrokerService';
 import { GoogleAnalyticsService } from './googleAnalyticsService';
 
 interface GenerationOptions {
@@ -108,7 +108,7 @@ export class ReportGenerationService {
     }
 
     // Obtener métricas de todas las fuentes en paralelo
-    let [metrics, marketData, similarProperties, tokkoStats] = await Promise.all([
+    let [metrics, marketData, similarProperties, tokkoStats, portalStats] = await Promise.all([
       this.metricsService.getPropertyMetrics(propertyId, month),
       this.marketService.comparePropertyToMarket(propertyId),
       this.marketService.getSimilarProperties(propertyId, month).catch(err => {
@@ -116,6 +116,7 @@ export class ReportGenerationService {
         return null;
       }),
       this.fetchTokkoStats(property.tokko_id, month),
+      this.fetchPortalStats(property.tokko_id),
     ]);
 
     // Hidratar metrics desde Tokko dashboard stats cuando la DB no tiene datos
@@ -191,29 +192,6 @@ export class ReportGenerationService {
         favorites_count: metrics.favorites_count,
         portal_views: metrics.portal_views,
       },
-      tokko_stats: tokkoStats,
-      tokko_property: tokkoPropertyData ? {
-        id: tokkoPropertyData.id,
-        publication_title: tokkoPropertyData.publication_title,
-        real_address: tokkoPropertyData.real_address,
-        type: tokkoPropertyData.type,
-        operations: tokkoPropertyData.operations,
-        location: tokkoPropertyData.location,
-        room_amount: tokkoPropertyData.room_amount,
-        suite_amount: tokkoPropertyData.suite_amount,
-        bathroom_amount: tokkoPropertyData.bathroom_amount,
-        parking_lot_amount: tokkoPropertyData.parking_lot_amount,
-        photos: tokkoPropertyData.photos?.slice(0, 3),
-        public_url: tokkoPropertyData.public_url,
-        producer: tokkoPropertyData.producer,
-        branch: tokkoPropertyData.branch ? {
-          name: tokkoPropertyData.branch.name,
-          address: tokkoPropertyData.branch.address,
-          phone: tokkoPropertyData.branch.phone,
-          email: tokkoPropertyData.branch.email,
-          logo: tokkoPropertyData.branch.logo,
-        } : null,
-      } : null,
       metrics_comparison: metricsComparison.changes,
       market_data: {
         property_price: marketData.property_price,
@@ -221,6 +199,30 @@ export class ReportGenerationService {
         position: marketData.position,
         difference_pct: marketData.difference_pct,
         similar_properties: similarProperties || null,
+        tokko_stats: tokkoStats,
+        portal_stats: portalStats.length > 0 ? portalStats : null,
+        tokko_property: tokkoPropertyData ? {
+          id: tokkoPropertyData.id,
+          publication_title: tokkoPropertyData.publication_title,
+          real_address: tokkoPropertyData.real_address,
+          type: tokkoPropertyData.type,
+          operations: tokkoPropertyData.operations,
+          location: tokkoPropertyData.location,
+          room_amount: tokkoPropertyData.room_amount,
+          suite_amount: tokkoPropertyData.suite_amount,
+          bathroom_amount: tokkoPropertyData.bathroom_amount,
+          parking_lot_amount: tokkoPropertyData.parking_lot_amount,
+          photos: tokkoPropertyData.photos?.slice(0, 3),
+          public_url: tokkoPropertyData.public_url,
+          producer: tokkoPropertyData.producer,
+          branch: tokkoPropertyData.branch ? {
+            name: tokkoPropertyData.branch.name,
+            address: tokkoPropertyData.branch.address,
+            phone: tokkoPropertyData.branch.phone,
+            email: tokkoPropertyData.branch.email,
+            logo: tokkoPropertyData.branch.logo,
+          } : null,
+        } : null,
       },
       custom_notes: null,
       generated_at: new Date().toISOString(),
@@ -305,6 +307,19 @@ export class ReportGenerationService {
     } catch (error) {
       console.error('Error fetching Tokko stats:', error);
       return null;
+    }
+  }
+
+  private async fetchPortalStats(tokkoId: string | null): Promise<TokkoPortalStats[]> {
+    if (!tokkoId || !this.tokkoService.isSessionConfigured()) {
+      return [];
+    }
+
+    try {
+      return await this.tokkoService.getPortalStats(Number(tokkoId));
+    } catch (error) {
+      console.error('Error fetching portal stats:', error);
+      return [];
     }
   }
 

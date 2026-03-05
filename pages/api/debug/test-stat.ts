@@ -60,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const html = await pageRes.text();
 
       // Find the function that opens publication stats
-      const openStatMatch = html.match(/function\s+openPublicationStat[^{]*\{[^}]*(?:\{[^}]*\}[^}]*)*\}/s);
+      const openStatMatch = html.match(/function\s+openPublicationStat[^{]*\{[^}]*(?:\{[^}]*\}[^}]*)*\}/);
       results.openPublicationStat_fn = openStatMatch ? openStatMatch[0].substring(0, 2000) : 'not found';
 
       // Also search for any fetch/ajax calls containing "stat" near "publication"
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       results.statUrlTemplates = (urlTemplateMatch || []).slice(0, 10);
 
       // Look for any stat/portal URL construction code
-      const statCodeMatches = html.match(/.{0,100}openPublicationStat.{0,300}/gs);
+      const statCodeMatches = html.match(/.{0,100}openPublicationStat.{0,300}/gi);
       results.statCodeContext = (statCodeMatches || []).slice(0, 3).map((s: string) => s.substring(0, 500));
 
       // Also look for any reference to exposicion/vistas/contactos

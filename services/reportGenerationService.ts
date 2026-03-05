@@ -118,54 +118,8 @@ export class ReportGenerationService {
       this.fetchTokkoStats(property.tokko_id, month),
     ]);
 
-    // If no metrics in DB, fetch from external sources
-    const hasNoMetrics = metrics.total_views === 0 && metrics.leads_count === 0
-      && metrics.favorites_count === 0 && metrics.visit_requests === 0;
-
     const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
     const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-
-    // Fetch from Tokko if available
-    if (hasNoMetrics && property.tokko_id) {
-      const tokko = new TokkobrokerService();
-      if (tokko.isConfigured()) {
-        const tokkoMetrics = await tokko.getPropertyMetrics(
-          property.tokko_id,
-          startOfMonth,
-          endOfMonth
-        );
-
-        if (tokkoMetrics) {
-          metrics = {
-            ...metrics,
-            total_views: tokkoMetrics.views || 0,
-            leads_count: tokkoMetrics.contacts || 0,
-            favorites_count: tokkoMetrics.favorites || 0,
-          };
-          console.log(`Fetched Tokko metrics for property ${propertyId}: views=${tokkoMetrics.views}, contacts=${tokkoMetrics.contacts}, favorites=${tokkoMetrics.favorites}`);
-
-          // Also save to property_metrics so future queries find it
-          try {
-            await this.supabase.from('property_metrics').insert({
-              property_id: propertyId,
-              date: startOfMonth.toISOString().split('T')[0],
-              views: tokkoMetrics.views || 0,
-              leads: tokkoMetrics.contacts || 0,
-              favorites: tokkoMetrics.favorites || 0,
-              unique_visitors: 0,
-              visit_requests: 0,
-              phone_clicks: 0,
-              whatsapp_clicks: 0,
-              email_inquiries: 0,
-              avg_time_on_page: 0,
-              portal_views: {},
-            });
-          } catch (saveErr) {
-            console.warn('Could not save Tokko metrics to DB:', saveErr);
-          }
-        }
-      }
-    }
 
     // Fetch from Google Analytics using the property's web_url
     if (property.web_url) {

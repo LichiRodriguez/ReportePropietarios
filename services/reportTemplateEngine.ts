@@ -61,6 +61,7 @@ export class ReportTemplateEngine {
     Handlebars.registerHelper('gt', (a: number, b: number) => a > b);
     Handlebars.registerHelper('or', (a: any, b: any) => a || b);
     Handlebars.registerHelper('add', (a: number, b: number) => (a || 0) + (b || 0));
+    Handlebars.registerHelper('lowercase', (str: string) => (str || '').toLowerCase());
 
     Handlebars.registerHelper('truncateAddress', (address: string) => {
       if (!address) return '';
@@ -149,6 +150,8 @@ export class ReportTemplateEngine {
       currency,
       hasTokkoStats: !!tokkoStats,
       hasTokkoProperty: !!tokkoProperty,
+      portalStats: marketData.portal_stats || [],
+      hasPortalStats: !!(marketData.portal_stats && marketData.portal_stats.length > 0),
     });
   }
 
@@ -221,6 +224,25 @@ export class ReportTemplateEngine {
     .portal-card { background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 10px; text-align: center; }
     .portal-card .portal-value { font-size: 24px; font-weight: 700; color: #333; }
     .portal-card .portal-name { font-size: 12px; color: #666; margin-top: 2px; }
+
+    /* Portal Exposure Stats */
+    .portal-exposure { margin-top: 20px; }
+    .portal-exposure-title { font-size: 15px; font-weight: 600; color: #c0392b; margin-bottom: 12px; }
+    .exposure-funnel { display: flex; gap: 0; align-items: stretch; margin-bottom: 16px; }
+    .exposure-step { flex: 1; padding: 16px 12px; text-align: center; position: relative; }
+    .exposure-step .exp-value { font-size: 28px; font-weight: 700; }
+    .exposure-step .exp-label { font-size: 11px; color: #666; margin-top: 2px; }
+    .exposure-step .exp-segment { font-size: 10px; color: #999; margin-top: 4px; }
+    .exposure-step:first-child { background: #fef2f2; border-radius: 10px 0 0 10px; border: 1px solid #fecaca; }
+    .exposure-step:first-child .exp-value { color: #dc2626; }
+    .exposure-step:nth-child(2) { background: #fff7ed; border-top: 1px solid #fed7aa; border-bottom: 1px solid #fed7aa; }
+    .exposure-step:nth-child(2) .exp-value { color: #ea580c; }
+    .exposure-step:last-child { background: #f0fdf4; border-radius: 0 10px 10px 0; border: 1px solid #bbf7d0; }
+    .exposure-step:last-child .exp-value { color: #16a34a; }
+    .portal-performance { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .perf-alto { background: #dcfce7; color: #166534; }
+    .perf-medio { background: #fef9c3; color: #854d0e; }
+    .perf-bajo { background: #fee2e2; color: #991b1b; }
 
     /* Contact sources */
     .sources-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -370,6 +392,37 @@ export class ReportTemplateEngine {
           <span class="source-tag">{{this.etiqueta}}: {{this.total}}</span>
           {{/each}}
         </div>
+      </div>
+      {{/if}}
+
+      {{#if hasPortalStats}}
+      <!-- Exposición en portales (ZonaProp, etc.) -->
+      <div class="portal-exposure" style="margin-top: 24px;">
+        {{#each portalStats}}
+        <div class="portal-exposure-title">📊 Rendimiento en {{this.portal_name}} (últimos 30 días)</div>
+
+        <div class="exposure-funnel">
+          <div class="exposure-step">
+            <div class="exp-value">{{formatNumber this.exposure.total}}</div>
+            <div class="exp-label">Exposición</div>
+            <div class="exp-segment">Promedio: {{formatNumber this.exposure.segment}}</div>
+          </div>
+          <div class="exposure-step">
+            <div class="exp-value">{{formatNumber this.views.total}}</div>
+            <div class="exp-label">Vistas del aviso</div>
+            <div class="exp-segment">Promedio: {{formatNumber this.views.segment}}</div>
+          </div>
+          <div class="exposure-step">
+            <div class="exp-value">{{formatNumber this.interested.total}}</div>
+            <div class="exp-label">Contactos interesados</div>
+            <div class="exp-segment">Promedio: {{formatNumber this.interested.segment}}</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 8px; text-align: center;">
+          <span class="portal-performance perf-{{lowercase this.performance}}">Desempeño: {{this.performance}}</span>
+        </div>
+        {{/each}}
       </div>
       {{/if}}
     </div>

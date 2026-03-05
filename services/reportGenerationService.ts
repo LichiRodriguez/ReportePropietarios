@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PropertyMetricsService } from './propertyMetricsService';
 import { MarketAnalysisService } from './marketAnalysisService';
-import { TokkobrokerService, TokkoPropertyStats } from './tokkobrokerService';
+import { TokkobrokerService, TokkoPropertyStats, TokkoPortalStats } from './tokkobrokerService';
 import { GoogleAnalyticsService } from './googleAnalyticsService';
 
 interface GenerationOptions {
@@ -108,7 +108,7 @@ export class ReportGenerationService {
     }
 
     // Obtener métricas de todas las fuentes en paralelo
-    let [metrics, marketData, similarProperties, tokkoStats] = await Promise.all([
+    let [metrics, marketData, similarProperties, tokkoStats, portalStats] = await Promise.all([
       this.metricsService.getPropertyMetrics(propertyId, month),
       this.marketService.comparePropertyToMarket(propertyId),
       this.marketService.getSimilarProperties(propertyId, month).catch(err => {
@@ -116,6 +116,7 @@ export class ReportGenerationService {
         return null;
       }),
       this.fetchTokkoStats(property.tokko_id, month),
+      this.fetchPortalStats(property.tokko_id),
     ]);
 
     // Hidratar metrics desde Tokko dashboard stats cuando la DB no tiene datos
@@ -199,6 +200,7 @@ export class ReportGenerationService {
         difference_pct: marketData.difference_pct,
         similar_properties: similarProperties || null,
         tokko_stats: tokkoStats,
+        portal_stats: portalStats.length > 0 ? portalStats : null,
         tokko_property: tokkoPropertyData ? {
           id: tokkoPropertyData.id,
           publication_title: tokkoPropertyData.publication_title,
@@ -305,6 +307,19 @@ export class ReportGenerationService {
     } catch (error) {
       console.error('Error fetching Tokko stats:', error);
       return null;
+    }
+  }
+
+  private async fetchPortalStats(tokkoId: string | null): Promise<TokkoPortalStats[]> {
+    if (!tokkoId || !this.tokkoService.isSessionConfigured()) {
+      return [];
+    }
+
+    try {
+      return await this.tokkoService.getPortalStats(Number(tokkoId));
+    } catch (error) {
+      console.error('Error fetching portal stats:', error);
+      return [];
     }
   }
 

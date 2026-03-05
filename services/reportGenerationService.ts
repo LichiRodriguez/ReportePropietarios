@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PropertyMetricsService } from './propertyMetricsService';
 import { MarketAnalysisService } from './marketAnalysisService';
-import { TokkobrokerService } from './tokkobrokerService';
+import { TokkobrokerService, TokkoPropertyStats } from './tokkobrokerService';
 import { GoogleAnalyticsService } from './googleAnalyticsService';
 
 interface GenerationOptions {
@@ -21,11 +21,13 @@ export class ReportGenerationService {
   private supabase: SupabaseClient;
   private metricsService: PropertyMetricsService;
   private marketService: MarketAnalysisService;
+  private tokkoService: TokkobrokerService;
 
   constructor(supabaseUrl: string, supabaseKey: string, searchEngineUrl: string) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
     this.metricsService = new PropertyMetricsService(supabaseUrl, supabaseKey, searchEngineUrl);
     this.marketService = new MarketAnalysisService(supabaseUrl, supabaseKey, searchEngineUrl);
+    this.tokkoService = new TokkobrokerService();
   }
 
   async generateMonthlyReports(options: GenerationOptions = {}): Promise<GenerationResult> {
@@ -40,7 +42,7 @@ export class ReportGenerationService {
     try {
       let query = this.supabase
         .from('properties')
-        .select('id, address, neighborhood, property_type, price, owner_id')
+        .select('id, address, neighborhood, property_type, price, owner_id, tokko_id')
         .eq('status', 'active')
         .eq('reports_enabled', true);
 
@@ -105,13 +107,15 @@ export class ReportGenerationService {
       return existingReport.id;
     }
 
-    let [metrics, marketData, similarProperties] = await Promise.all([
+    // Obtener métricas de todas las fuentes en paralelo
+    let [metrics, marketData, similarProperties, tokkoStats] = await Promise.all([
       this.metricsService.getPropertyMetrics(propertyId, month),
       this.marketService.comparePropertyToMarket(propertyId),
       this.marketService.getSimilarProperties(propertyId, month).catch(err => {
         console.warn('Could not fetch similar properties:', err);
         return null;
       }),
+      this.fetchTokkoStats(property.tokko_id, month),
     ]);
 
     // If no metrics in DB, fetch from external sources
@@ -196,6 +200,12 @@ export class ReportGenerationService {
 
     const metricsComparison = await this.metricsService.getMetricsComparison(propertyId, month);
 
+    // Obtener datos de la propiedad desde Tokko API si hay tokko_id
+    let tokkoPropertyData = null;
+    if (property.tokko_id && this.tokkoService.isConfigured()) {
+      tokkoPropertyData = await this.tokkoService.getProperty(property.tokko_id);
+    }
+
     const reportData = {
       property_id: propertyId,
       owner_id: property.owner_id,
@@ -212,6 +222,29 @@ export class ReportGenerationService {
         favorites_count: metrics.favorites_count,
         portal_views: metrics.portal_views,
       },
+      tokko_stats: tokkoStats,
+      tokko_property: tokkoPropertyData ? {
+        id: tokkoPropertyData.id,
+        publication_title: tokkoPropertyData.publication_title,
+        real_address: tokkoPropertyData.real_address,
+        type: tokkoPropertyData.type,
+        operations: tokkoPropertyData.operations,
+        location: tokkoPropertyData.location,
+        room_amount: tokkoPropertyData.room_amount,
+        suite_amount: tokkoPropertyData.suite_amount,
+        bathroom_amount: tokkoPropertyData.bathroom_amount,
+        parking_lot_amount: tokkoPropertyData.parking_lot_amount,
+        photos: tokkoPropertyData.photos?.slice(0, 3),
+        public_url: tokkoPropertyData.public_url,
+        producer: tokkoPropertyData.producer,
+        branch: tokkoPropertyData.branch ? {
+          name: tokkoPropertyData.branch.name,
+          address: tokkoPropertyData.branch.address,
+          phone: tokkoPropertyData.branch.phone,
+          email: tokkoPropertyData.branch.email,
+          logo: tokkoPropertyData.branch.logo,
+        } : null,
+      } : null,
       metrics_comparison: metricsComparison.changes,
       market_data: {
         property_price: marketData.property_price,
@@ -264,6 +297,45 @@ export class ReportGenerationService {
 
     if (error) {
       console.warn('Error deleting existing reports:', error);
+    }
+  }
+
+  private async fetchTokkoStats(
+    tokkoId: string | null,
+    month: Date
+  ): Promise<TokkoPropertyStats | null> {
+    if (!tokkoId || !this.tokkoService.isSessionConfigured()) {
+      return null;
+    }
+
+    try {
+      const stats = await this.tokkoService.getPropertyStats(Number(tokkoId));
+      if (!stats) return null;
+
+      // Filtrar el desglose mensual para el mes solicitado
+      const targetYear = String(month.getFullYear());
+      const targetMonth = String(month.getMonth() + 1);
+
+      const monthData = stats.desglose_mensual.find(
+        (m) => m.year === targetYear && m.month === targetMonth
+      );
+
+      if (monthData) {
+        // Agregar datos específicos del mes al reporte
+        return {
+          ...stats,
+          // Sobreescribir totales con los del mes específico si están disponibles
+          emails_enviados_mes: monthData.emails,
+          whatsapp_enviados_mes: monthData.whatsapp,
+          destacada_mes: monthData.destacada,
+          eventos_mes: monthData.eventos,
+        } as any;
+      }
+
+      return stats;
+    } catch (error) {
+      console.error('Error fetching Tokko stats:', error);
+      return null;
     }
   }
 

@@ -15,9 +15,10 @@ export class ReportTemplateEngine {
       return new Intl.NumberFormat('es-AR').format(value);
     });
 
-    Handlebars.registerHelper('formatCurrency', (value: number) => {
+    Handlebars.registerHelper('formatCurrency', (value: number, currency?: string) => {
       if (!value && value !== 0) return 'USD 0';
-      return `USD ${new Intl.NumberFormat('es-AR').format(value)}`;
+      const curr = typeof currency === 'string' ? currency : 'USD';
+      return `${curr} ${new Intl.NumberFormat('es-AR').format(value)}`;
     });
 
     Handlebars.registerHelper('formatPercent', (value: number) => {
@@ -51,8 +52,14 @@ export class ReportTemplateEngine {
       return date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
     });
 
+    Handlebars.registerHelper('formatDate', (dateStr: string) => {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    });
+
     Handlebars.registerHelper('eq', (a: any, b: any) => a === b);
     Handlebars.registerHelper('gt', (a: number, b: number) => a > b);
+    Handlebars.registerHelper('or', (a: any, b: any) => a || b);
 
     Handlebars.registerHelper('truncateAddress', (address: string) => {
       if (!address) return '';
@@ -73,6 +80,7 @@ export class ReportTemplateEngine {
           surface_total,
           rooms,
           bathrooms,
+          tokko_id,
           owners (
             name,
             email
@@ -91,10 +99,32 @@ export class ReportTemplateEngine {
     const marketData = report.market_data || {};
     const similarData = marketData.similar_properties || {};
 
+    const tokkoProperty = report.tokko_property || null;
+    const tokkoStats = report.tokko_stats || null;
+
+    // Determinar foto principal
+    let mainPhoto = null;
+    if (tokkoProperty?.photos) {
+      mainPhoto = tokkoProperty.photos.find((p: any) => p.is_front_cover) || tokkoProperty.photos[0];
+    }
+
+    // Determinar precio y operación
+    let operation = null;
+    let price = report.properties?.price || 0;
+    let currency = 'USD';
+    if (tokkoProperty?.operations?.[0]) {
+      const op = tokkoProperty.operations[0];
+      operation = op.operation_type === 'Sale' ? 'Venta' : op.operation_type === 'Rent' ? 'Alquiler' : op.operation_type;
+      if (op.prices?.[0]) {
+        price = op.prices[0].price;
+        currency = op.prices[0].currency;
+      }
+    }
+
     return template({
       report,
       property: report.properties,
-      owner: report.properties.owners,
+      owner: report.properties?.owners,
       metrics: report.metrics || {},
       comparison: report.metrics_comparison || {},
       market: marketData,
@@ -103,6 +133,14 @@ export class ReportTemplateEngine {
       customNotes: report.custom_notes,
       reportMonth: report.report_month,
       generatedAt: report.generated_at,
+      tokko: tokkoProperty,
+      tokkoStats,
+      mainPhoto,
+      operation,
+      price,
+      currency,
+      hasTokkoStats: !!tokkoStats,
+      hasTokkoProperty: !!tokkoProperty,
     });
   }
 
@@ -113,132 +151,277 @@ export class ReportTemplateEngine {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reporte Mensual - {{property.address}}</title>
+  <title>Reporte al propietario - {{property.address}}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #1e293b; }
-    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; padding: 40px; border-radius: 12px; margin-bottom: 24px; }
-    .header h1 { font-size: 24px; margin-bottom: 8px; }
-    .header p { opacity: 0.9; font-size: 14px; }
-    .section { background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .section h2 { font-size: 18px; margin-bottom: 16px; color: #1e40af; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
-    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
-    .metric-card { background: #f1f5f9; padding: 16px; border-radius: 8px; text-align: center; }
-    .metric-value { font-size: 28px; font-weight: bold; color: #1e40af; }
-    .metric-label { font-size: 12px; color: #64748b; margin-top: 4px; }
-    .metric-change { font-size: 12px; margin-top: 4px; font-weight: 600; }
-    .market-position { padding: 16px; border-radius: 8px; text-align: center; font-weight: 600; }
-    .portals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
-    .portal-card { padding: 12px; border-radius: 8px; background: #f1f5f9; text-align: center; }
-    .portal-name { font-size: 12px; color: #64748b; }
-    .portal-value { font-size: 20px; font-weight: bold; color: #1e40af; }
-    .notes { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px; padding: 16px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #ffffff; color: #333; font-size: 14px; }
+    .container { max-width: 800px; margin: 0 auto; padding: 24px; }
+
+    /* Header */
+    .report-header { margin-bottom: 32px; }
+    .report-header h1 { font-size: 28px; color: #c0392b; font-weight: 600; margin-bottom: 4px; }
+    .report-header .date { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Property Card */
+    .property-card { display: flex; gap: 24px; margin-bottom: 32px; align-items: flex-start; }
+    .property-photo { width: 280px; height: 200px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+    .property-photo img { width: 100%; height: 100%; object-fit: cover; }
+    .property-info { flex: 1; }
+    .property-type { font-size: 12px; color: #999; text-transform: uppercase; margin-bottom: 4px; }
+    .property-address { font-size: 22px; font-weight: 600; color: #333; margin-bottom: 4px; }
+    .property-location { font-size: 14px; color: #c0392b; margin-bottom: 12px; display: flex; align-items: center; gap: 4px; }
+    .property-features { display: flex; gap: 16px; margin-bottom: 12px; color: #666; font-size: 14px; }
+    .property-features span { display: flex; align-items: center; gap: 4px; }
+    .property-operation { font-size: 13px; color: #666; }
+    .property-price { font-size: 16px; font-weight: 600; color: #333; }
+
+    /* Sections */
+    .section { margin-bottom: 28px; }
+    .section h2 { font-size: 18px; font-weight: 600; color: #c0392b; margin-bottom: 16px; }
+    .section-title { font-size: 18px; font-weight: 600; color: #c0392b; margin-bottom: 16px; }
+
+    /* Stats Table (Tokko style) */
+    .stats-table { width: 100%; border-collapse: collapse; background: #f9fafb; border-radius: 8px; overflow: hidden; }
+    .stats-table thead { background: #f3f4f6; }
+    .stats-table th { padding: 12px 16px; text-align: left; font-size: 12px; color: #666; font-weight: 600; text-transform: uppercase; }
+    .stats-table td { padding: 14px 16px; border-top: 1px solid #e5e7eb; font-size: 15px; }
+    .stats-table .stat-label { display: flex; align-items: center; gap: 8px; color: #333; }
+    .stats-table .stat-icon { width: 20px; text-align: center; color: #999; }
+
+    /* Metrics Cards */
+    .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .metric-card { background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px 16px; border-radius: 8px; text-align: center; }
+    .metric-card .value { font-size: 32px; font-weight: 700; color: #c0392b; }
+    .metric-card .label { font-size: 12px; color: #666; margin-top: 4px; }
+    .metric-card .change { font-size: 11px; margin-top: 4px; font-weight: 600; }
+
+    /* Portal Grid */
+    .portals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .portal-card { background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 8px; text-align: center; }
+    .portal-card .portal-value { font-size: 24px; font-weight: 700; color: #333; }
+    .portal-card .portal-name { font-size: 12px; color: #666; margin-top: 2px; }
+
+    /* Contact sources */
+    .sources-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .source-tag { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 12px; border-radius: 16px; font-size: 12px; color: #555; }
+
+    /* Market */
+    .market-row { display: flex; gap: 16px; }
+    .market-card { flex: 1; background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; text-align: center; }
+    .market-card .value { font-size: 24px; font-weight: 700; color: #333; }
+    .market-card .label { font-size: 12px; color: #666; margin-top: 4px; }
+
+    /* Similar properties table */
     .similar-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
-    .similar-table th { background: #f1f5f9; padding: 10px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
+    .similar-table th { background: #f3f4f6; padding: 10px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
     .similar-table td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }
     .similar-table tr:last-child td { border-bottom: none; }
     .similar-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
     .similar-criteria { font-size: 13px; color: #64748b; margin-bottom: 8px; }
-    .footer { text-align: center; padding: 24px; color: #94a3b8; font-size: 12px; }
+
+    /* Notes */
+    .notes { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.5; }
+
+    /* Footer */
+    .footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; }
+    .footer-content { display: flex; gap: 24px; align-items: center; }
+    .footer-agent { display: flex; align-items: center; gap: 12px; }
+    .footer-agent img { width: 48px; height: 48px; border-radius: 50%; }
+    .footer-agent .name { font-weight: 600; font-size: 14px; }
+    .footer-agent .detail { font-size: 12px; color: #666; }
+    .footer-company { flex: 1; text-align: right; }
+    .footer-company .company-name { font-weight: 600; font-size: 14px; }
+    .footer-company .company-detail { font-size: 12px; color: #666; }
+    .footer-note { text-align: center; padding: 16px 0; color: #999; font-size: 11px; }
+
+    @media (max-width: 600px) {
+      .property-card { flex-direction: column; }
+      .property-photo { width: 100%; }
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+      .market-row { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>Reporte Mensual de Propiedad</h1>
-      <p>{{property.address}}</p>
-      <p>Período: {{formatMonth reportMonth}}</p>
-      <p>Propietario: {{owner.name}}</p>
+    <!-- Header -->
+    <div class="report-header">
+      <h1>Reporte al propietario</h1>
+      <div class="date">Período: {{formatMonth reportMonth}}</div>
     </div>
 
+    <!-- Property Card -->
+    <div class="property-card">
+      {{#if mainPhoto}}
+      <div class="property-photo">
+        <img src="{{mainPhoto.image}}" alt="{{property.address}}" />
+      </div>
+      {{/if}}
+      <div class="property-info">
+        {{#if tokko}}
+        <div class="property-type">{{tokko.type.name}}</div>
+        <div class="property-address">{{tokko.real_address}}</div>
+        <div class="property-location">📍 {{tokko.location.name}}</div>
+        <div class="property-features">
+          {{#if (gt tokko.room_amount 0)}}<span>🏠 {{tokko.room_amount}} amb.</span>{{/if}}
+          {{#if (gt tokko.suite_amount 0)}}<span>🛏 {{tokko.suite_amount}} dorm.</span>{{/if}}
+          {{#if (gt tokko.bathroom_amount 0)}}<span>🚿 {{tokko.bathroom_amount}} baño(s)</span>{{/if}}
+          {{#if (gt tokko.parking_lot_amount 0)}}<span>🚗 {{tokko.parking_lot_amount}} cochera(s)</span>{{/if}}
+        </div>
+        {{else}}
+        <div class="property-address">{{property.address}}</div>
+        {{#if property.neighborhood}}<div class="property-location">📍 {{property.neighborhood}}</div>{{/if}}
+        {{/if}}
+        {{#if operation}}
+        <div class="property-operation">{{operation}}</div>
+        {{/if}}
+        <div class="property-price">{{formatCurrency price currency}}</div>
+      </div>
+    </div>
+
+    {{#if hasTokkoStats}}
+    <!-- Estadísticas de Tokko (Reporte de propiedad) -->
     <div class="section">
-      <h2>Métricas de Rendimiento</h2>
+      <div class="section-title">Reporte de propiedad</div>
       <div class="metrics-grid">
         <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.total_views}}</div>
-          <div class="metric-label">Visualizaciones</div>
-          <div class="metric-change" style="color: {{trendColor comparison.views_change_pct}}">
-            {{trendIcon comparison.views_change_pct}} {{formatPercent comparison.views_change_pct}}
-          </div>
+          <div class="value">{{formatNumber tokkoStats.emails_enviados}}</div>
+          <div class="label">Fichas enviadas</div>
         </div>
         <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.leads_count}}</div>
-          <div class="metric-label">Consultas</div>
-          <div class="metric-change" style="color: {{trendColor comparison.leads_change_pct}}">
+          <div class="value">{{formatNumber tokkoStats.contactos_interesados}}</div>
+          <div class="label">Consultas recibidas</div>
+        </div>
+        <div class="metric-card">
+          <div class="value">{{formatNumber tokkoStats.whatsapp_enviados}}</div>
+          <div class="label">WhatsApp enviados</div>
+        </div>
+        <div class="metric-card">
+          <div class="value">{{formatNumber tokkoStats.eventos_realizados}}</div>
+          <div class="label">Eventos realizados</div>
+        </div>
+      </div>
+
+      {{#if tokkoStats.fuentes_contacto.length}}
+      <div style="margin-top: 16px;">
+        <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600;">Fuentes de contacto</div>
+        <div class="sources-list">
+          {{#each tokkoStats.fuentes_contacto}}
+          <span class="source-tag">{{this.etiqueta}}: {{this.total}}</span>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
+    </div>
+    {{/if}}
+
+    <!-- Métricas Web (Google Analytics) -->
+    <div class="section">
+      <div class="section-title">Estadísticas en la web</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="value">{{formatNumber metrics.total_views}}</div>
+          <div class="label">Visualizaciones</div>
+          {{#if comparison.views_change_pct}}
+          <div class="change" style="color: {{trendColor comparison.views_change_pct}}">
+            {{trendIcon comparison.views_change_pct}} {{formatPercent comparison.views_change_pct}} vs mes anterior
+          </div>
+          {{/if}}
+        </div>
+        <div class="metric-card">
+          <div class="value">{{formatNumber metrics.unique_visitors}}</div>
+          <div class="label">Visitantes únicos</div>
+        </div>
+        <div class="metric-card">
+          <div class="value">{{formatNumber metrics.leads_count}}</div>
+          <div class="label">Consultas web</div>
+          {{#if comparison.leads_change_pct}}
+          <div class="change" style="color: {{trendColor comparison.leads_change_pct}}">
             {{trendIcon comparison.leads_change_pct}} {{formatPercent comparison.leads_change_pct}}
           </div>
+          {{/if}}
         </div>
         <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.visit_requests}}</div>
-          <div class="metric-label">Solicitudes de Visita</div>
-          <div class="metric-change" style="color: {{trendColor comparison.visits_change_pct}}">
-            {{trendIcon comparison.visits_change_pct}} {{formatPercent comparison.visits_change_pct}}
-          </div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.favorites_count}}</div>
-          <div class="metric-label">Favoritos</div>
+          <div class="value">{{formatNumber metrics.favorites_count}}</div>
+          <div class="label">Favoritos</div>
         </div>
       </div>
     </div>
 
+    <!-- Rendimiento por Portal -->
+    {{#if (or metrics.portal_views.zonaprop (or metrics.portal_views.argenprop metrics.portal_views.mercadolibre))}}
     <div class="section">
-      <h2>Rendimiento por Portal</h2>
+      <div class="section-title">Rendimiento por portal</div>
       <div class="portals-grid">
+        {{#if (gt metrics.portal_views.zonaprop 0)}}
         <div class="portal-card">
           <div class="portal-value">{{formatNumber metrics.portal_views.zonaprop}}</div>
           <div class="portal-name">ZonaProp</div>
         </div>
+        {{/if}}
+        {{#if (gt metrics.portal_views.argenprop 0)}}
         <div class="portal-card">
           <div class="portal-value">{{formatNumber metrics.portal_views.argenprop}}</div>
           <div class="portal-name">ArgenProp</div>
         </div>
+        {{/if}}
+        {{#if (gt metrics.portal_views.mercadolibre 0)}}
         <div class="portal-card">
           <div class="portal-value">{{formatNumber metrics.portal_views.mercadolibre}}</div>
           <div class="portal-name">MercadoLibre</div>
         </div>
+        {{/if}}
+        {{#if (gt metrics.portal_views.website 0)}}
         <div class="portal-card">
           <div class="portal-value">{{formatNumber metrics.portal_views.website}}</div>
           <div class="portal-name">Sitio Web</div>
         </div>
+        {{/if}}
       </div>
     </div>
+    {{/if}}
 
+    <!-- Contactos -->
+    {{#if (or metrics.phone_clicks (or metrics.whatsapp_clicks metrics.email_inquiries))}}
     <div class="section">
-      <h2>Contactos</h2>
-      <div class="metrics-grid">
+      <div class="section-title">Contactos desde la web</div>
+      <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr);">
         <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.phone_clicks}}</div>
-          <div class="metric-label">Clicks Teléfono</div>
+          <div class="value">{{formatNumber metrics.phone_clicks}}</div>
+          <div class="label">Clicks en teléfono</div>
         </div>
         <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.whatsapp_clicks}}</div>
-          <div class="metric-label">Clicks WhatsApp</div>
+          <div class="value">{{formatNumber metrics.whatsapp_clicks}}</div>
+          <div class="label">Clicks en WhatsApp</div>
         </div>
         <div class="metric-card">
-          <div class="metric-value">{{formatNumber metrics.email_inquiries}}</div>
-          <div class="metric-label">Consultas Email</div>
+          <div class="value">{{formatNumber metrics.email_inquiries}}</div>
+          <div class="label">Consultas por email</div>
         </div>
       </div>
     </div>
+    {{/if}}
 
+    <!-- Análisis de Mercado -->
+    {{#if market.property_price}}
     <div class="section">
-      <h2>Análisis de Mercado</h2>
-      <div class="metrics-grid">
-        <div class="metric-card">
-          <div class="metric-value">{{formatCurrency market.property_price}}</div>
-          <div class="metric-label">Precio Publicado</div>
+      <div class="section-title">Análisis de mercado</div>
+      <div class="market-row">
+        <div class="market-card">
+          <div class="value">{{formatCurrency market.property_price}}</div>
+          <div class="label">Precio publicado</div>
         </div>
-        <div class="metric-card">
-          <div class="metric-value">{{formatCurrency market.market_average}}</div>
-          <div class="metric-label">Promedio de Mercado</div>
+        <div class="market-card">
+          <div class="value">{{formatCurrency market.market_average}}</div>
+          <div class="label">Promedio de mercado</div>
         </div>
-      </div>
-      <div class="market-position" style="margin-top: 16px; background: {{#if (eq market.position 'above')}}#fef3c7{{else if (eq market.position 'below')}}#dcfce7{{else}}#f1f5f9{{/if}}">
-        {{positionText market.position}} ({{formatPercent market.difference_pct}})
+        <div class="market-card">
+          <div class="value" style="color: {{trendColor market.difference_pct}}">{{formatPercent market.difference_pct}}</div>
+          <div class="label">{{positionText market.position}}</div>
+        </div>
       </div>
     </div>
+    {{/if}}
 
     {{#if (gt similarProperties.length 0)}}
     <div class="section">
@@ -279,16 +462,37 @@ export class ReportTemplateEngine {
 
     {{#if customNotes}}
     <div class="section">
-      <h2>Notas del Agente</h2>
+      <div class="section-title">Notas del agente</div>
       <div class="notes">
         {{{customNotes}}}
       </div>
     </div>
     {{/if}}
 
+    <!-- Footer -->
     <div class="footer">
-      <p>Reporte generado automáticamente el {{generatedAt}}</p>
-      <p>Este reporte es confidencial y está destinado exclusivamente al propietario.</p>
+      {{#if tokko.branch}}
+      <div class="footer-content">
+        {{#if tokko.producer}}
+        <div class="footer-agent">
+          <div>
+            <div class="name">{{tokko.producer.name}}</div>
+            {{#if tokko.producer.phone}}<div class="detail">Tel: {{tokko.producer.phone}}</div>{{/if}}
+            {{#if tokko.producer.email}}<div class="detail">{{tokko.producer.email}}</div>{{/if}}
+          </div>
+        </div>
+        {{/if}}
+        <div class="footer-company">
+          <div class="company-name">{{tokko.branch.name}}</div>
+          {{#if tokko.branch.address}}<div class="company-detail">{{tokko.branch.address}}</div>{{/if}}
+          {{#if tokko.branch.phone}}<div class="company-detail">Tel: {{tokko.branch.phone}}</div>{{/if}}
+          {{#if tokko.branch.email}}<div class="company-detail">{{tokko.branch.email}}</div>{{/if}}
+        </div>
+      </div>
+      {{/if}}
+      <div class="footer-note">
+        Reporte generado el {{formatDate generatedAt}} | Confidencial - destinado exclusivamente al propietario
+      </div>
     </div>
   </div>
 </body>

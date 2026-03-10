@@ -328,7 +328,7 @@ export default function ReportsPanel() {
                       fontWeight: 600,
                     }}
                   >
-                    {sending === report.id ? 'Enviando...' : 'Enviar WhatsApp'}
+                    {sending === report.id ? 'Preparando...' : 'Enviar WhatsApp'}
                   </button>
                 )}
               </div>

@@ -42,10 +42,14 @@ export default async function handler(
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    const reportUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/reports/${id}/view`;
+    // Construir la URL base desde los headers del request para evitar depender de NEXT_PUBLIC_APP_URL
+    const protocol = (req.headers['x-forwarded-proto'] as string) || 'http';
+    const host = req.headers.host;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/reports/${id}/pdf`;
 
     const owner = report.properties?.owners;
-    const propertyAddress = report.properties?.address || 'Dirección no disponible';
+    const propertyAddress = report.properties?.address || 'Direccion no disponible';
 
     if (!owner) {
       return res.status(400).json({ error: 'Report has no associated owner' });
@@ -63,25 +67,18 @@ export default async function handler(
       year: 'numeric'
     });
 
-    const metrics = {
-      total_views: report.metrics?.total_views || 0,
-      leads_count: report.metrics?.leads_count || 0,
-      visit_requests: report.metrics?.visit_requests || 0
-    };
-
     const message = generateReportMessage(
       ownerName,
       propertyAddress,
       reportMonth,
-      metrics,
-      reportUrl
+      pdfUrl
     );
 
     return res.status(200).json({
       success: true,
       phone: phone,
       message: message,
-      report_url: reportUrl,
+      pdf_url: pdfUrl,
       owner_name: ownerName
     });
 

@@ -151,6 +151,39 @@ npm run start    # Servidor de produccion
 - Abre WhatsApp Web con mensaje pre-llenado
 - Tracking de envio en report_deliveries
 
+## Generacion de PDF (lib/pdfGenerator.ts)
+
+- El endpoint `/api/reports/[id]/pdf` genera el PDF on-demand con Puppeteer y lo devuelve como `application/pdf`
+- El link al PDF va incluido en el mensaje de WhatsApp (sin almacenamiento en disco ni Supabase Storage)
+- `vercel.json` configura 1024 MB de memoria y 60s de timeout para ese endpoint
+
+### Como funciona segun entorno
+
+| Entorno | Chromium |
+|---------|----------|
+| Local (macOS dev) | Chrome del sistema en `/Applications/Google Chrome.app/...` |
+| Vercel (produccion) | `@sparticuz/chromium-min` descarga el binario en runtime |
+
+### Regla critica: NO usar propiedades de @sparticuz/chromium que no existen en chromium-min
+
+Usamos `@sparticuz/chromium-min` (version liviana). Este paquete **NO tiene** la propiedad `defaultViewport` — esa solo existe en el paquete completo `@sparticuz/chromium`.
+
+**NUNCA escribir:**
+```ts
+defaultViewport: chromium.defaultViewport  // ERROR de TypeScript en build
+```
+
+**SIEMPRE usar viewport fijo:**
+```ts
+defaultViewport: { width: 1280, height: 800 }
+```
+
+Este error rompe el build de Vercel con `Command "npm run build" exited with 1` y un Type error sobre `defaultViewport`.
+
+Propiedades disponibles en `@sparticuz/chromium-min`:
+- `chromium.args` — array de flags para el browser
+- `chromium.executablePath(url?)` — funcion async que descarga y devuelve el path al binario
+
 ## Troubleshooting Comun
 
 - Si falta algun modulo: `npm install`
@@ -158,3 +191,4 @@ npm run start    # Servidor de produccion
 - Si Google Analytics da Permission denied: verificar que el service account este como Viewer en GA4
 - Si Tokko da 401: verificar TOKKO_API_KEY
 - Si el cron no corre en Vercel: verificar vercel.json y que el plan soporte crons
+- **Si el build de Vercel falla con Type error en pdfGenerator.ts**: ver seccion "Generacion de PDF" arriba — probablemente se uso `chromium.defaultViewport` que no existe en chromium-min

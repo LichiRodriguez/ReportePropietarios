@@ -17,7 +17,7 @@ export async function generatePdfFromHtml(html: string): Promise<Buffer> {
 
   const browser = await puppeteer.launch({
     args: isDev ? [] : chromium.args,
-    defaultViewport: chromium.defaultViewport,
+    defaultViewport: { width: 1280, height: 800 },
     executablePath,
     headless: true,
   });

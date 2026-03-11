@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { generateReportMessage } from '@/lib/whatsapp';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,9 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const tenant = await getTenantFromApiRequest(req);
+  if (!tenant) return res.status(401).json({ error: 'No autorizado' });
 
   const { id } = req.query;
 
@@ -36,6 +40,7 @@ export default async function handler(
         )
       `)
       .eq('id', id)
+      .eq('tenant_id', tenant.id)
       .single();
 
     if (fetchError || !report) {

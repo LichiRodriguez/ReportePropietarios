@@ -1,12 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { TokkobrokerService } from '../../../services/tokkobrokerService';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   try {
+    const tenant = await getTenantFromApiRequest(req);
+    if (!tenant) return res.status(401).json({ error: 'No autorizado' });
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -35,6 +39,7 @@ export default async function handler(
             email
           )
         `)
+        .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -61,6 +66,7 @@ export default async function handler(
         web_url: web_url || null,
         status: 'active',
         reports_enabled: true,
+        tenant_id: tenant.id,
       };
 
       // If tokko_id provided, fetch Tokko data and link in the same step

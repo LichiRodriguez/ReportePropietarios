@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 interface CsvRow {
   nombre_propietario: string;
@@ -143,6 +144,9 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const tenant = await getTenantFromApiRequest(req);
+  if (!tenant) return res.status(401).json({ error: 'No autorizado' });
+
   const { csv_content } = req.body;
 
   if (!csv_content || typeof csv_content !== 'string') {
@@ -215,6 +219,7 @@ export default async function handler(
           email: owner.email || null,
           phone: owner.telefono || null,
           whatsapp: owner.whatsapp || owner.telefono || null,
+          tenant_id: tenant.id,
         })
         .select('id')
         .single();
@@ -237,6 +242,7 @@ export default async function handler(
               owner_id: ownerData.id,
               status: 'active',
               reports_enabled: true,
+              tenant_id: tenant.id,
             };
 
           if (prop.id_tokko?.trim()) {

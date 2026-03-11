@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -10,6 +11,9 @@ export default async function handler(
   }
 
   try {
+    const tenant = await getTenantFromApiRequest(req);
+    if (!tenant) return res.status(401).json({ error: 'No autorizado' });
+
     const { id } = req.query;
     const { address, neighborhood, price, tokko_id, web_url, owner_name, owner_phone } = req.body || {};
 
@@ -32,6 +36,7 @@ export default async function handler(
       .from('properties')
       .update(propertyUpdate)
       .eq('id', id)
+      .eq('tenant_id', tenant.id)
       .select('*, owners:owner_id(id, name, phone, whatsapp, email)')
       .single();
 
@@ -65,6 +70,7 @@ export default async function handler(
       .from('properties')
       .select('*, owners:owner_id(id, name, phone, whatsapp, email)')
       .eq('id', id)
+      .eq('tenant_id', tenant.id)
       .single();
 
     if (fetchError) {

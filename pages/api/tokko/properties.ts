@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { TokkobrokerService } from '../../../services/tokkobrokerService';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -8,6 +9,9 @@ export default async function handler(
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const tenant = await getTenantFromApiRequest(req);
+  if (!tenant) return res.status(401).json({ error: 'No autorizado' });
 
   const tokko = new TokkobrokerService();
 

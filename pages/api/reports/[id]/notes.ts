@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -8,6 +9,9 @@ export default async function handler(
   if (req.method !== 'PUT') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const tenant = await getTenantFromApiRequest(req);
+  if (!tenant) return res.status(401).json({ error: 'No autorizado' });
 
   try {
     const { id } = req.query;
@@ -21,7 +25,8 @@ export default async function handler(
     const { error } = await supabase
       .from('monthly_property_reports')
       .update({ custom_notes: custom_notes || null })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('tenant_id', tenant.id);
 
     if (error) {
       return res.status(500).json({ error: error.message });

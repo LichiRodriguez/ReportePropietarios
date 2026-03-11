@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { GetServerSideProps } from 'next';
 import Link from 'next/link';
+import { getTenantFromPageContext } from '@/lib/auth';
 
 interface Owner {
   id: string;
@@ -611,4 +613,12 @@ const btnLink: React.CSSProperties = {
 const btnCreate: React.CSSProperties = {
   padding: '4px 12px', background: '#0891b2', color: 'white', border: 'none',
   borderRadius: '4px', cursor: 'pointer', fontSize: '13px',
+};
+
+export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+  const tenant = await getTenantFromPageContext(req);
+  if (!tenant) {
+    return { redirect: { destination: '/auth-required', permanent: false } };
+  }
+  return { props: {} };
 };

@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
+import type { GetServerSideProps } from 'next';
 import Link from 'next/link';
+import { getTenantFromPageContext } from '@/lib/auth';
 
 interface ImportResult {
   row: number;
@@ -300,3 +302,11 @@ export default function ImportPage() {
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+  const tenant = await getTenantFromPageContext(req);
+  if (!tenant) {
+    return { redirect: { destination: '/auth-required', permanent: false } };
+  }
+  return { props: {} };
+};

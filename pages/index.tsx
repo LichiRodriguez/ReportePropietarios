@@ -1,4 +1,6 @@
+import type { GetServerSideProps } from 'next';
 import Link from 'next/link';
+import { getTenantFromPageContext } from '@/lib/auth';
 
 export default function Home() {
   return (
@@ -41,3 +43,11 @@ export default function Home() {
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+  const tenant = await getTenantFromPageContext(req);
+  if (!tenant) {
+    return { redirect: { destination: '/auth-required', permanent: false } };
+  }
+  return { props: {} };
+};

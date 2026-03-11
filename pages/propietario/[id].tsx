@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { getTenantFromPageContext } from '@/lib/auth';
 
 interface Owner {
   id: string;
@@ -379,4 +381,12 @@ const metricNumber: React.CSSProperties = {
 
 const metricLabel: React.CSSProperties = {
   fontSize: '10px', color: '#64748b',
+};
+
+export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+  const tenant = await getTenantFromPageContext(req);
+  if (!tenant) {
+    return { redirect: { destination: '/auth-required', permanent: false } };
+  }
+  return { props: {} };
 };

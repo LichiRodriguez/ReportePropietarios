@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { TokkobrokerService } from '../../../services/tokkobrokerService';
+import { getTenantFromApiRequest } from '@/lib/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -9,6 +10,9 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const tenant = await getTenantFromApiRequest(req);
+  if (!tenant) return res.status(401).json({ error: 'No autorizado' });
 
   const { property_id } = req.body;
 
@@ -26,6 +30,7 @@ export default async function handler(
     .from('properties')
     .select('id, tokko_id, web_url')
     .eq('id', property_id)
+    .eq('tenant_id', tenant.id)
     .single();
 
   if (fetchError || !property) {

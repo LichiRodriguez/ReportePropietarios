@@ -1,32 +1,16 @@
-interface ReportMetrics {
-  total_views: number;
-  leads_count: number;
-  visit_requests: number;
-}
-
 export function generateReportMessage(
   ownerName: string,
   propertyAddress: string,
   reportMonth: string,
-  metrics: ReportMetrics,
-  reportUrl: string
+  pdfUrl: string
 ): string {
-  const message = `Hola ${ownerName}! 👋
-
-Le comparto el reporte mensual de su propiedad en *${propertyAddress}* correspondiente a *${reportMonth}*.
-
-📊 *Resumen del mes:*
-• ${metrics.total_views} visualizaciones
-• ${metrics.leads_count} consultas recibidas
-• ${metrics.visit_requests} solicitudes de visita
-
-📄 Puede ver el reporte completo aquí:
-${reportUrl}
-
-Quedo a disposición por cualquier consulta.
-¡Saludos!`;
-
-  return message;
+  const firstName = ownerName.split(' ')[0];
+  return (
+    `Hola ${firstName}, le comparto el reporte mensual de su propiedad ` +
+    `en ${propertyAddress} correspondiente a ${reportMonth}.\n\n` +
+    `${pdfUrl}\n\n` +
+    `Quedo a disposicion por cualquier consulta.\nSaludos.`
+  );
 }
 
 export function generateWhatsAppUrl(phone: string, message: string): string {

@@ -4,6 +4,13 @@ import { MarketAnalysisService } from './marketAnalysisService';
 import { TokkobrokerService, TokkoPropertyStats, TokkoPortalStats } from './tokkobrokerService';
 import { GoogleAnalyticsService } from './googleAnalyticsService';
 
+interface TenantConfig {
+  tenantId: string;
+  tokkoApiKey?: string | null;
+  gaPropertyId?: string | null;
+  gaCredentialsBase64?: string | null;
+}
+
 interface GenerationOptions {
   month?: Date;
   propertyIds?: string[];
@@ -22,12 +29,16 @@ export class ReportGenerationService {
   private metricsService: PropertyMetricsService;
   private marketService: MarketAnalysisService;
   private tokkoService: TokkobrokerService;
+  private tenantConfig: TenantConfig | null;
 
-  constructor(supabaseUrl: string, supabaseKey: string, searchEngineUrl: string) {
+  constructor(supabaseUrl: string, supabaseKey: string, searchEngineUrl: string, tenantConfig?: TenantConfig) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
     this.metricsService = new PropertyMetricsService(supabaseUrl, supabaseKey, searchEngineUrl);
     this.marketService = new MarketAnalysisService(supabaseUrl, supabaseKey, searchEngineUrl);
-    this.tokkoService = new TokkobrokerService();
+    this.tenantConfig = tenantConfig || null;
+    this.tokkoService = new TokkobrokerService(
+      tenantConfig?.tokkoApiKey ? { apiKey: tenantConfig.tokkoApiKey } : undefined
+    );
   }
 
   async generateMonthlyReports(options: GenerationOptions = {}): Promise<GenerationResult> {
@@ -45,6 +56,11 @@ export class ReportGenerationService {
         .select('id, address, neighborhood, property_type, price, owner_id, tokko_id')
         .eq('status', 'active')
         .eq('reports_enabled', true);
+
+      // Filtrar por tenant si hay config
+      if (this.tenantConfig) {
+        query = query.eq('tenant_id', this.tenantConfig.tenantId);
+      }
 
       if (options.propertyIds && options.propertyIds.length > 0) {
         query = query.in('id', options.propertyIds);
@@ -140,7 +156,14 @@ export class ReportGenerationService {
     // Fetch from Google Analytics using the property's web_url
     if (property.web_url) {
       try {
-        const ga = new GoogleAnalyticsService();
+        const ga = new GoogleAnalyticsService(
+          this.tenantConfig?.gaPropertyId || this.tenantConfig?.gaCredentialsBase64
+            ? {
+                gaPropertyId: this.tenantConfig.gaPropertyId || undefined,
+                gaCredentialsBase64: this.tenantConfig.gaCredentialsBase64 || undefined,
+              }
+            : undefined
+        );
         if (ga.isConfigured()) {
           const gaMetrics = await ga.getMetricsByPageUrl(
             property.web_url,
@@ -176,11 +199,12 @@ export class ReportGenerationService {
       tokkoPropertyData = await this.tokkoService.getProperty(property.tokko_id);
     }
 
-    const reportData = {
+    const reportData: Record<string, any> = {
       property_id: propertyId,
       owner_id: property.owner_id,
       report_month: new Date(month.getFullYear(), month.getMonth(), 1).toISOString(),
       status: 'draft',
+      ...(this.tenantConfig ? { tenant_id: this.tenantConfig.tenantId } : {}),
       metrics: {
         total_views: metrics.total_views,
         unique_visitors: metrics.unique_visitors,

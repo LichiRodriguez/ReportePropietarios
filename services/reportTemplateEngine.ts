@@ -96,6 +96,19 @@ export class ReportTemplateEngine {
       throw new Error(`Report not found: ${reportId}`);
     }
 
+    // Fetch tenant branding
+    let tenant: any = null;
+    if (report.tenant_id) {
+      const { data: tenantData } = await this.supabase
+        .from('tenants')
+        .select('company_name, agent_name, logo_url, primary_color')
+        .eq('id', report.tenant_id)
+        .single();
+      tenant = tenantData;
+    }
+
+    const primaryColor = tenant?.primary_color || '#c0392b';
+
     const template = Handlebars.compile(this.getTemplate());
 
     const marketData = report.market_data || {};
@@ -152,6 +165,10 @@ export class ReportTemplateEngine {
       hasTokkoProperty: !!tokkoProperty,
       portalStats: marketData.portal_stats || [],
       hasPortalStats: !!(marketData.portal_stats && marketData.portal_stats.length > 0),
+      // Branding del tenant
+      primaryColor,
+      tenant,
+      hasTenant: !!tenant,
     });
   }
 
@@ -164,15 +181,17 @@ export class ReportTemplateEngine {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reporte al propietario - {{property.address}}</title>
   <style>
+    :root { --primary: {{primaryColor}}; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #ffffff; color: #333; font-size: 15px; line-height: 1.5; }
     .container { max-width: 800px; margin: 0 auto; padding: 24px; }
 
     /* Header */
-    .report-header { margin-bottom: 28px; border-bottom: 3px solid #c0392b; padding-bottom: 16px; }
-    .report-header h1 { font-size: 26px; color: #c0392b; font-weight: 700; margin-bottom: 4px; }
-    .report-header .period { font-size: 16px; color: #555; }
-    .report-header .period strong { color: #333; }
+    .report-header { margin-bottom: 28px; border-bottom: 3px solid var(--primary); padding-bottom: 16px; display: flex; align-items: center; gap: 16px; }
+    .report-header .header-logo { height: 48px; width: auto; }
+    .report-header .header-text h1 { font-size: 26px; color: var(--primary); font-weight: 700; margin-bottom: 4px; }
+    .report-header .header-text .period { font-size: 16px; color: #555; }
+    .report-header .header-text .period strong { color: #333; }
 
     /* Property Card */
     .property-card { display: flex; gap: 24px; margin-bottom: 32px; align-items: flex-start; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
@@ -181,7 +200,7 @@ export class ReportTemplateEngine {
     .property-info { flex: 1; padding: 4px 0; }
     .property-type { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
     .property-address { font-size: 20px; font-weight: 700; color: #333; margin-bottom: 4px; }
-    .property-location { font-size: 14px; color: #c0392b; margin-bottom: 12px; }
+    .property-location { font-size: 14px; color: var(--primary); margin-bottom: 12px; }
     .property-features { display: flex; gap: 16px; margin-bottom: 12px; color: #555; font-size: 14px; }
     .property-features span { display: flex; align-items: center; gap: 4px; }
     .property-operation { font-size: 13px; color: #777; }
@@ -190,9 +209,9 @@ export class ReportTemplateEngine {
     /* Sections */
     .section { margin-bottom: 32px; }
     .section-header { margin-bottom: 16px; }
-    .section-title { font-size: 19px; font-weight: 700; color: #c0392b; margin-bottom: 2px; }
+    .section-title { font-size: 19px; font-weight: 700; color: var(--primary); margin-bottom: 2px; }
     .section-subtitle { font-size: 13px; color: #888; }
-    .section h2 { font-size: 19px; font-weight: 700; color: #c0392b; margin-bottom: 16px; }
+    .section h2 { font-size: 19px; font-weight: 700; color: var(--primary); margin-bottom: 16px; }
 
     /* Resumen rápido */
     .summary-banner { background: linear-gradient(135deg, #fef3c7, #fde68a); border: 1px solid #f59e0b; border-radius: 10px; padding: 16px 20px; margin-bottom: 32px; text-align: center; }
@@ -203,7 +222,7 @@ export class ReportTemplateEngine {
     .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
     .metrics-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .metric-card { background: #f9fafb; border: 1px solid #e5e7eb; padding: 18px 14px; border-radius: 10px; text-align: center; }
-    .metric-card .value { font-size: 34px; font-weight: 800; color: #c0392b; line-height: 1; }
+    .metric-card .value { font-size: 34px; font-weight: 800; color: var(--primary); line-height: 1; }
     .metric-card .label { font-size: 13px; color: #555; margin-top: 6px; font-weight: 500; }
     .metric-card .change { font-size: 11px; margin-top: 4px; font-weight: 600; }
     .metric-card.secondary .value { color: #1e40af; }
@@ -211,7 +230,7 @@ export class ReportTemplateEngine {
     /* Funnel visual */
     .funnel { display: flex; align-items: center; gap: 0; margin-bottom: 16px; }
     .funnel-step { flex: 1; text-align: center; padding: 16px 8px; position: relative; }
-    .funnel-step .funnel-value { font-size: 30px; font-weight: 800; color: #c0392b; line-height: 1; }
+    .funnel-step .funnel-value { font-size: 30px; font-weight: 800; color: var(--primary); line-height: 1; }
     .funnel-step .funnel-label { font-size: 12px; color: #555; margin-top: 6px; font-weight: 500; }
     .funnel-arrow { font-size: 24px; color: #d1d5db; flex-shrink: 0; padding: 0 4px; }
     .funnel-step:first-child { background: #fef2f2; border-radius: 10px 0 0 10px; border: 1px solid #fecaca; }
@@ -227,7 +246,7 @@ export class ReportTemplateEngine {
 
     /* Portal Exposure Stats */
     .portal-exposure { margin-top: 20px; }
-    .portal-exposure-title { font-size: 15px; font-weight: 600; color: #c0392b; margin-bottom: 12px; }
+    .portal-exposure-title { font-size: 15px; font-weight: 600; color: var(--primary); margin-bottom: 12px; }
     .exposure-funnel { display: flex; gap: 0; align-items: stretch; margin-bottom: 16px; }
     .exposure-step { flex: 1; padding: 16px 12px; text-align: center; position: relative; }
     .exposure-step .exp-value { font-size: 28px; font-weight: 700; }
@@ -293,8 +312,11 @@ export class ReportTemplateEngine {
   <div class="container">
     <!-- Header -->
     <div class="report-header">
-      <h1>Reporte al propietario</h1>
-      <div class="period">Resumen de actividad del mes de <strong>{{formatMonth reportMonth}}</strong> (últimos 30 días)</div>
+      {{#if tenant.logo_url}}<img class="header-logo" src="{{tenant.logo_url}}" alt="{{tenant.company_name}}" />{{/if}}
+      <div class="header-text">
+        <h1>Reporte al propietario</h1>
+        <div class="period">Resumen de actividad del mes de <strong>{{formatMonth reportMonth}}</strong> (últimos 30 días)</div>
+      </div>
     </div>
 
     <!-- Property Card -->
@@ -605,8 +627,15 @@ export class ReportTemplateEngine {
 
     <!-- Footer -->
     <div class="footer">
-      {{#if tokko.branch}}
+      {{#if (or hasTenant tokko.branch)}}
       <div class="footer-content">
+        {{#if tenant.agent_name}}
+        <div class="footer-agent">
+          <div>
+            <div class="name">{{tenant.agent_name}}</div>
+          </div>
+        </div>
+        {{else}}
         {{#if tokko.producer}}
         <div class="footer-agent">
           <div>
@@ -616,11 +645,18 @@ export class ReportTemplateEngine {
           </div>
         </div>
         {{/if}}
+        {{/if}}
         <div class="footer-company">
+          {{#if tenant.company_name}}
+          <div class="company-name">{{tenant.company_name}}</div>
+          {{else}}
+          {{#if tokko.branch}}
           <div class="company-name">{{tokko.branch.name}}</div>
           {{#if tokko.branch.address}}<div class="company-detail">{{tokko.branch.address}}</div>{{/if}}
           {{#if tokko.branch.phone}}<div class="company-detail">Tel: {{tokko.branch.phone}}</div>{{/if}}
           {{#if tokko.branch.email}}<div class="company-detail">{{tokko.branch.email}}</div>{{/if}}
+          {{/if}}
+          {{/if}}
         </div>
       </div>
       {{/if}}

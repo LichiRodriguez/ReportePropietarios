@@ -20,11 +20,16 @@ export class GoogleAnalyticsService {
   private client: BetaAnalyticsDataClient | null = null;
   private propertyId: string;
 
-  constructor() {
-    this.propertyId = process.env.GA_PROPERTY_ID || '';
+  constructor(config?: {
+    gaPropertyId?: string;
+    gaCredentialsBase64?: string;
+  }) {
+    this.propertyId = config?.gaPropertyId || process.env.GA_PROPERTY_ID || '';
 
-    const credentialsPath = process.env.GOOGLE_ANALYTICS_CREDENTIALS_PATH;
-    const credentialsBase64 = process.env.GOOGLE_ANALYTICS_CREDENTIALS_BASE64;
+    const credentialsPath = !config?.gaCredentialsBase64
+      ? process.env.GOOGLE_ANALYTICS_CREDENTIALS_PATH
+      : undefined;
+    const credentialsBase64 = config?.gaCredentialsBase64 || process.env.GOOGLE_ANALYTICS_CREDENTIALS_BASE64;
 
     if (this.propertyId && (credentialsPath || credentialsBase64)) {
       try {

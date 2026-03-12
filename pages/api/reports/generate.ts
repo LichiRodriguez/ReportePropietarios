@@ -19,7 +19,13 @@ export default async function handler(
     const service = new ReportGenerationService(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      process.env.SEARCH_ENGINE_URL!
+      process.env.SEARCH_ENGINE_URL!,
+      {
+        tenantId: tenant.id,
+        tokkoApiKey: tenant.tokko_api_key,
+        gaPropertyId: tenant.ga_property_id,
+        gaCredentialsBase64: tenant.ga_credentials_base64,
+      }
     );
 
     if (property_id) {

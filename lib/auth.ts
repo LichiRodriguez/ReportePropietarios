@@ -12,6 +12,8 @@ export interface Tenant {
   company_name: string | null;
   logo_url: string | null;
   primary_color: string;
+  portals: string[] | null;
+  notification_email: string | null;
 }
 
 const COOKIE_NAME = 'tenant_session';
@@ -44,7 +46,7 @@ function getSupabase() {
   );
 }
 
-const TENANT_COLUMNS = 'id, name, tokko_api_key, ga_property_id, ga_credentials_base64, agent_name, company_name, logo_url, primary_color';
+const TENANT_COLUMNS = 'id, name, tokko_api_key, ga_property_id, ga_credentials_base64, agent_name, company_name, logo_url, primary_color, portals, notification_email';
 
 export async function getTenantById(tenantId: string): Promise<Tenant | null> {
   const { data } = await getSupabase()

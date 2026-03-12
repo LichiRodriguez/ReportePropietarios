@@ -7,11 +7,15 @@ interface Tenant {
   agent_name: string | null;
   logo_url: string | null;
   primary_color: string;
+  portals: string[] | null;
+  notification_email: string | null;
   tokko_api_key: string | null;
   ga_property_id: string | null;
   access_token: string;
   created_at: string;
 }
+
+const PORTAL_OPTIONS = ['ZonaProp', 'MercadoLibre', 'ArgenProp', 'BuscadorProp', 'Properati', 'Inmuebles24'];
 
 const EMPTY_FORM = {
   name: '',
@@ -19,6 +23,8 @@ const EMPTY_FORM = {
   agent_name: '',
   logo_url: '',
   primary_color: '#c0392b',
+  portals: ['ZonaProp', 'MercadoLibre', 'ArgenProp'] as string[],
+  notification_email: '',
   tokko_api_key: '',
   ga_property_id: '',
   ga_credentials_base64: '',
@@ -90,6 +96,8 @@ export default function AdminPage() {
       agent_name: tenant.agent_name || '',
       logo_url: tenant.logo_url || '',
       primary_color: tenant.primary_color || '#c0392b',
+      portals: tenant.portals || ['ZonaProp', 'MercadoLibre', 'ArgenProp'],
+      notification_email: tenant.notification_email || '',
       tokko_api_key: tenant.tokko_api_key || '',
       ga_property_id: tenant.ga_property_id || '',
       ga_credentials_base64: '',
@@ -187,6 +195,40 @@ export default function AdminPage() {
                   />
                 </div>
               </div>
+              <div style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <label style={styles.label}>Portales donde publica</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {PORTAL_OPTIONS.map(portal => (
+                    <label key={portal} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', cursor: 'pointer', padding: '4px 10px', borderRadius: '6px', border: form.portals.includes(portal) ? '2px solid #1e40af' : '1px solid #d1d5db', background: form.portals.includes(portal) ? '#eff6ff' : 'white' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.portals.includes(portal)}
+                        onChange={e => {
+                          const next = e.target.checked
+                            ? [...form.portals, portal]
+                            : form.portals.filter(p => p !== portal);
+                          setForm({ ...form, portals: next });
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                      {portal}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                  Se muestran en el subtítulo de la sección de portales del reporte
+                </div>
+              </div>
+              <div style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <label style={styles.label}>Email de notificacion (cuando los reportes mensuales estan listos)</label>
+                <input
+                  style={styles.input}
+                  type="email"
+                  value={form.notification_email}
+                  onChange={e => setForm({ ...form, notification_email: e.target.value })}
+                  placeholder="Ej: admin@inmobiliaria.com"
+                />
+              </div>
               <div style={styles.field}>
                 <label style={styles.label}>Tokko API Key</label>
                 <input
@@ -234,6 +276,8 @@ export default function AdminPage() {
               <th style={styles.th}>Cliente</th>
               <th style={styles.th}>Empresa</th>
               <th style={styles.th}>Color</th>
+              <th style={styles.th}>Portales</th>
+              <th style={styles.th}>Email notif.</th>
               <th style={styles.th}>Tokko</th>
               <th style={styles.th}>GA</th>
               <th style={styles.th}>URL de acceso</th>
@@ -253,6 +297,14 @@ export default function AdminPage() {
                     <span style={{ width: '20px', height: '20px', borderRadius: '4px', background: tenant.primary_color, display: 'inline-block' }}></span>
                     <span style={{ fontSize: '12px', color: '#666' }}>{tenant.primary_color}</span>
                   </div>
+                </td>
+                <td style={styles.td}>
+                  <span style={{ fontSize: '12px', color: '#555' }}>{(tenant.portals || ['ZonaProp', 'MercadoLibre', 'ArgenProp']).join(', ')}</span>
+                </td>
+                <td style={styles.td}>
+                  <span style={{ fontSize: '12px', color: tenant.notification_email ? '#166534' : '#999' }}>
+                    {tenant.notification_email || 'No'}
+                  </span>
                 </td>
                 <td style={styles.td}>
                   <span style={{ ...styles.badge, background: tenant.tokko_api_key ? '#dcfce7' : '#f3f4f6', color: tenant.tokko_api_key ? '#166534' : '#999' }}>
@@ -311,7 +363,7 @@ const styles: Record<string, React.CSSProperties> = {
   input: { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', outline: 'none' },
   formActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' },
   tableWrapper: { background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'auto' },
-  table: { width: '100%', minWidth: '900px', borderCollapse: 'collapse' as const, fontSize: '14px' },
+  table: { width: '100%', minWidth: '1050px', borderCollapse: 'collapse' as const, fontSize: '14px' },
   th: { textAlign: 'left' as const, padding: '12px 16px', background: '#f9fafb', fontWeight: 600, color: '#475569', borderBottom: '2px solid #e5e7eb', fontSize: '13px' },
   td: { padding: '12px 16px', borderBottom: '1px solid #f3f4f6' },
   badge: { padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 500 },

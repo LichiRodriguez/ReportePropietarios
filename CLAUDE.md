@@ -78,6 +78,8 @@ TOKKO_API_KEY=
 GOOGLE_ANALYTICS_CREDENTIALS_PATH=      # Local: path al JSON
 GOOGLE_ANALYTICS_CREDENTIALS_BASE64=     # Produccion: JSON en base64
 GA_PROPERTY_ID=
+RESEND_API_KEY=                          # Para envio de emails de notificacion
+RESEND_FROM_EMAIL=                       # Ej: Reportes <reportes@tudominio.com>
 ```
 
 Para Vercel, las credenciales de Google Analytics van en base64 (GOOGLE_ANALYTICS_CREDENTIALS_BASE64).

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { ReportGenerationService } from '@/services/reportGenerationService';
+import { sendMonthlyReportsReadyEmail } from '@/services/emailService';
 
 export default async function handler(
   req: NextApiRequest,
@@ -22,7 +23,7 @@ export default async function handler(
     // Obtener todos los tenants activos
     const { data: tenants, error: tenantsError } = await supabase
       .from('tenants')
-      .select('id, name, tokko_api_key, ga_property_id, ga_credentials_base64');
+      .select('id, name, company_name, tokko_api_key, ga_property_id, ga_credentials_base64, notification_email');
 
     if (tenantsError || !tenants || tenants.length === 0) {
       console.log('No hay tenants configurados');
@@ -53,6 +54,24 @@ export default async function handler(
 
         allResults.push({ tenant: tenant.name, result });
         console.log(`Tenant ${tenant.name}: ${result.reports_generated}/${result.total_properties} reportes generados`);
+
+        // Enviar email de notificacion si el tenant tiene email configurado
+        if (tenant.notification_email && result.reports_generated > 0) {
+          const now = new Date();
+          const reportMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://reporte-propietarios.vercel.app';
+
+          const emailResult = await sendMonthlyReportsReadyEmail(tenant.notification_email, {
+            tenantName: tenant.name,
+            companyName: tenant.company_name,
+            reportsGenerated: result.reports_generated,
+            totalProperties: result.total_properties,
+            reportMonth,
+            appUrl,
+          });
+
+          console.log(`Email a ${tenant.notification_email}: ${emailResult.success ? 'enviado' : emailResult.error}`);
+        }
       } catch (tenantError: any) {
         console.error(`Error generando reportes para tenant ${tenant.name}:`, tenantError);
         allResults.push({ tenant: tenant.name, result: { error: tenantError.message } });

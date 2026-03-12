@@ -101,13 +101,19 @@ export class ReportTemplateEngine {
     if (report.tenant_id) {
       const { data: tenantData } = await this.supabase
         .from('tenants')
-        .select('company_name, agent_name, logo_url, primary_color')
+        .select('company_name, agent_name, logo_url, primary_color, portals')
         .eq('id', report.tenant_id)
         .single();
       tenant = tenantData;
     }
 
     const primaryColor = tenant?.primary_color || '#c0392b';
+
+    // Portales configurados del tenant (ej: "ZonaProp, BuscadorProp y otros portales")
+    const portals: string[] = tenant?.portals || ['ZonaProp', 'MercadoLibre', 'ArgenProp'];
+    const portalsText = portals.length > 0
+      ? portals.join(', ') + ' y otros portales'
+      : 'portales inmobiliarios';
 
     const template = Handlebars.compile(this.getTemplate());
 
@@ -169,6 +175,7 @@ export class ReportTemplateEngine {
       primaryColor,
       tenant,
       hasTenant: !!tenant,
+      portalsText,
     });
   }
 
@@ -267,19 +274,6 @@ export class ReportTemplateEngine {
     .sources-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .source-tag { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 14px; border-radius: 20px; font-size: 13px; color: #555; }
 
-    /* Market */
-    .market-row { display: flex; gap: 12px; }
-    .market-card { flex: 1; background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 10px; text-align: center; }
-    .market-card .value { font-size: 22px; font-weight: 700; color: #333; }
-    .market-card .label { font-size: 12px; color: #666; margin-top: 4px; }
-
-    /* Similar properties table */
-    .similar-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
-    .similar-table th { background: #f3f4f6; padding: 10px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
-    .similar-table td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; }
-    .similar-table tr:last-child td { border-bottom: none; }
-    .similar-criteria { font-size: 13px; color: #64748b; margin-bottom: 8px; }
-
     /* Notes */
     .notes { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 10px; padding: 16px 20px; font-size: 15px; line-height: 1.6; }
 
@@ -365,7 +359,7 @@ export class ReportTemplateEngine {
     <div class="section">
       <div class="section-header">
         <div class="section-title">Actividad en portales inmobiliarios</div>
-        <div class="section-subtitle">Datos de los últimos 30 días en ZonaProp, MercadoLibre, ArgenProp y otros portales</div>
+        <div class="section-subtitle">Datos de los últimos 30 días en {{portalsText}}</div>
       </div>
 
       <!-- Funnel: Fichas → Consultas → Contactos efectivos -->
@@ -548,71 +542,6 @@ export class ReportTemplateEngine {
         </div>
         {{/if}}
       </div>
-    </div>
-    {{/if}}
-
-    <hr class="divider" />
-
-    <!-- ══════════════════════════════════════════ -->
-    <!-- SECCIÓN 3: ANÁLISIS DE MERCADO             -->
-    <!-- ══════════════════════════════════════════ -->
-    {{#if market.property_price}}
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">Análisis de mercado</div>
-        <div class="section-subtitle">Cómo se compara su propiedad con otras similares en la zona</div>
-      </div>
-      <div class="market-row">
-        <div class="market-card">
-          <div class="value">{{formatCurrency market.property_price}}</div>
-          <div class="label">Su precio publicado</div>
-        </div>
-        <div class="market-card">
-          <div class="value">{{formatCurrency market.market_average}}</div>
-          <div class="label">Promedio de la zona</div>
-        </div>
-        <div class="market-card">
-          <div class="value" style="color: {{trendColor market.difference_pct}}">{{formatPercent market.difference_pct}}</div>
-          <div class="label">{{positionText market.position}}</div>
-        </div>
-      </div>
-    </div>
-    {{/if}}
-
-    {{#if (gt similarProperties.length 0)}}
-    <div class="section">
-      <h2>Propiedades similares en la zona</h2>
-      {{#if similarCriteria}}
-      <p class="similar-criteria">
-        Propiedades en {{similarCriteria.neighborhood}} entre {{formatCurrency similarCriteria.price_min}} y {{formatCurrency similarCriteria.price_max}}
-      </p>
-      {{/if}}
-      <table class="similar-table">
-        <thead>
-          <tr>
-            <th>Dirección</th>
-            <th>Precio</th>
-            <th>Sup.</th>
-            <th>Visitas</th>
-            <th>Consultas</th>
-            <th>Favs</th>
-            <th>Días pub.</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{#each similarProperties}}
-          <tr>
-            <td>{{truncateAddress this.address}}</td>
-            <td>{{formatCurrency this.price}}</td>
-            <td>{{#if this.surface_total}}{{this.surface_total}} m²{{else}}-{{/if}}</td>
-            <td>{{formatNumber this.total_views}}</td>
-            <td>{{formatNumber this.leads_count}}</td>
-            <td>{{formatNumber this.favorites_count}}</td>
-            <td>{{this.days_on_market}}</td>
-          </tr>
-          {{/each}}
-        </tbody>
-      </table>
     </div>
     {{/if}}
 

@@ -277,6 +277,13 @@ export class ReportTemplateEngine {
     /* Notes */
     .notes { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 10px; padding: 16px 20px; font-size: 15px; line-height: 1.6; }
 
+    /* Guide section */
+    .guide-section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 32px; }
+    .guide-title { font-size: 17px; font-weight: 700; color: var(--primary); margin-bottom: 16px; }
+    .guide-item { margin-bottom: 14px; }
+    .guide-item .guide-label { font-weight: 600; font-size: 14px; color: #333; margin-bottom: 2px; }
+    .guide-item .guide-text { font-size: 13px; color: #555; line-height: 1.5; }
+
     /* Footer */
     .footer { margin-top: 36px; padding-top: 24px; border-top: 2px solid #e5e7eb; }
     .footer-content { display: flex; gap: 24px; align-items: center; }
@@ -553,6 +560,42 @@ export class ReportTemplateEngine {
       </div>
     </div>
     {{/if}}
+
+    <!-- Guía: qué significa cada dato -->
+    <div class="guide-section">
+      <div class="guide-title">{{#if owner.name}}{{owner.name}}, ¿qué{{else}}¿Qué{{/if}} significa cada número?</div>
+
+      <div class="guide-item">
+        <div class="guide-label">📬 Fichas enviadas</div>
+        <div class="guide-text">Cuántas personas recibieron los datos de tu propiedad. Más fichas = más gente viendo tu aviso.</div>
+      </div>
+
+      <div class="guide-item">
+        <div class="guide-label">💬 Consultas</div>
+        <div class="guide-text">Cada consulta es alguien que pidió más información. Ya sea que coordinamos una visita o no, nos hemos contactado y conversamos sobre tu propiedad.</div>
+      </div>
+
+      <div class="guide-item">
+        <div class="guide-label">📱 Contactos directos</div>
+        <div class="guide-text">Los que nos escribieron por WhatsApp o pidieron visita. Son los más interesados.</div>
+      </div>
+
+      {{#if hasPortalStats}}
+      <div class="guide-item">
+        <div class="guide-label">📈 Rendimiento en portales</div>
+        <div class="guide-text">Cuántas veces apareció tu aviso en búsquedas, cuántos lo abrieron y cuántos nos contactaron. El "promedio" te compara con propiedades similares de la zona.</div>
+      </div>
+      {{/if}}
+
+      <div class="guide-item">
+        <div class="guide-label">🌐 Nuestra web</div>
+        <div class="guide-text">Visitas a tu propiedad en nuestro sitio web, personas distintas que la vieron, y consultas recibidas.</div>
+      </div>
+
+      <div class="guide-item">
+        <div class="guide-text" style="margin-top: 8px; color: #333;">Tu propiedad está activa y trabajando en múltiples canales. Si tenés alguna duda, escribinos y lo charlamos.</div>
+      </div>
+    </div>
 
     <!-- Footer -->
     <div class="footer">

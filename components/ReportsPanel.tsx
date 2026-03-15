@@ -235,7 +235,7 @@ export default function ReportsPanel() {
             <div
               key={report.id}
               style={{
-                background: 'white',
+                background: report.status === 'sent' ? '#fafafa' : 'white',
                 border: '1px solid #e2e8f0',
                 borderRadius: '12px',
                 padding: '20px',

@@ -31,8 +31,11 @@ const EMPTY_FORM = {
 };
 
 export default function AdminPage() {
+  const [adminKey, setAdminKey] = useState('');
+  const [authenticated, setAuthenticated] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,9 +43,14 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
+  const adminHeaders = (): HeadersInit => ({
+    'Content-Type': 'application/json',
+    'X-Admin-Key': adminKey,
+  });
+
   const fetchTenants = async () => {
     try {
-      const res = await fetch('/api/admin/tenants');
+      const res = await fetch('/api/admin/tenants', { headers: adminHeaders() });
       if (!res.ok) throw new Error('No autorizado');
       const data = await res.json();
       setTenants(data.tenants || []);
@@ -53,9 +61,23 @@ export default function AdminPage() {
     }
   };
 
-  useEffect(() => {
-    fetchTenants();
-  }, []);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    try {
+      const res = await fetch('/api/admin/tenants', {
+        headers: { 'X-Admin-Key': adminKey },
+      });
+      if (!res.ok) throw new Error('Clave incorrecta');
+      setAuthenticated(true);
+      setLoading(true);
+      const data = await res.json();
+      setTenants(data.tenants || []);
+      setLoading(false);
+    } catch {
+      setLoginError('Clave incorrecta');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +90,7 @@ export default function AdminPage() {
 
       const res = await fetch('/api/admin/tenants', {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders(),
         body: JSON.stringify(body),
       });
 
@@ -115,6 +137,30 @@ export default function AdminPage() {
     setCopiedToken(tokenId);
     setTimeout(() => setCopiedToken(null), 2000);
   };
+
+  if (!authenticated) {
+    return (
+      <div style={{ ...styles.container, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <form onSubmit={handleLogin} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '32px', width: '100%', maxWidth: '400px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '8px', textAlign: 'center' }}>Admin</h1>
+          <p style={{ fontSize: '14px', color: '#666', textAlign: 'center', marginBottom: '24px' }}>Ingresa la clave de administrador</p>
+          {loginError && <div style={styles.error}>{loginError}</div>}
+          <input
+            type="password"
+            style={{ ...styles.input, width: '100%', marginBottom: '16px', boxSizing: 'border-box' }}
+            value={adminKey}
+            onChange={e => setAdminKey(e.target.value)}
+            placeholder="Clave de admin"
+            autoFocus
+            required
+          />
+          <button type="submit" style={{ ...styles.primaryBtn, width: '100%' }}>
+            Entrar
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   if (loading) return <div style={styles.container}><p>Cargando...</p></div>;
 

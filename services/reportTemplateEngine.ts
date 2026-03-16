@@ -374,16 +374,6 @@ export class ReportTemplateEngine {
       </div>
     </div>
 
-    <!-- Resumen rápido -->
-    {{#if hasTokkoStats}}
-    <div class="summary-banner">
-      <div class="summary-text">
-        En los últimos 30 días, su propiedad recibió <strong>{{formatNumber tokkoTotal}} interacciones</strong> en los portales inmobiliarios
-        {{#if (gt metrics.total_views 0)}} y <strong>{{formatNumber metrics.total_views}} visitas</strong> en nuestra página web{{/if}}.
-      </div>
-    </div>
-    {{/if}}
-
     <!-- ══════════════════════════════════════════ -->
     <!-- SECCIÓN 1: ACTIVIDAD EN PORTALES (TOKKO)  -->
     <!-- ══════════════════════════════════════════ -->
@@ -516,25 +506,6 @@ export class ReportTemplateEngine {
         </div>
       </div>
 
-      {{#if (or metrics.phone_clicks (or metrics.whatsapp_clicks metrics.email_inquiries))}}
-      <div style="margin-top: 16px;">
-        <div style="font-size: 14px; color: #555; margin-bottom: 8px; font-weight: 600;">Contactos desde la web</div>
-        <div class="metrics-grid-3">
-          <div class="metric-card secondary">
-            <div class="value">{{formatNumber metrics.phone_clicks}}</div>
-            <div class="label">Llamaron por teléfono</div>
-          </div>
-          <div class="metric-card secondary">
-            <div class="value">{{formatNumber metrics.whatsapp_clicks}}</div>
-            <div class="label">Escribieron por WhatsApp</div>
-          </div>
-          <div class="metric-card secondary">
-            <div class="value">{{formatNumber metrics.email_inquiries}}</div>
-            <div class="label">Enviaron consulta por email</div>
-          </div>
-        </div>
-      </div>
-      {{/if}}
     </div>
 
     <!-- ══════════════════════════════════════════ -->

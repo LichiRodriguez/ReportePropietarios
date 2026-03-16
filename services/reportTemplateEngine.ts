@@ -148,6 +148,26 @@ export class ReportTemplateEngine {
       ? (tokkoStats.emails_enviados || 0) + (tokkoStats.contactos_interesados || 0) + (tokkoStats.whatsapp_enviados || 0) + (tokkoStats.eventos_realizados || 0)
       : 0;
 
+    // Calcular totales cross-platform (portales + web)
+    const portalStatsArr: any[] = marketData.portal_stats || [];
+    const metrics = report.metrics || {};
+
+    const totalVistas =
+      portalStatsArr.reduce((sum: number, p: any) => sum + (p.exposure?.total || 0), 0)
+      + (metrics.total_views || 0);
+
+    const totalPersonas =
+      portalStatsArr.reduce((sum: number, p: any) => sum + (p.views?.total || 0), 0)
+      + (metrics.unique_visitors || 0);
+
+    const totalConsultas =
+      portalStatsArr.reduce((sum: number, p: any) => sum + (p.interested?.total || 0), 0)
+      + (metrics.leads_count || 0)
+      + (metrics.phone_clicks || 0)
+      + (metrics.whatsapp_clicks || 0);
+
+    const hasTotals = totalVistas > 0 || totalPersonas > 0 || totalConsultas > 0;
+
     return template({
       report,
       property: report.properties,
@@ -171,6 +191,11 @@ export class ReportTemplateEngine {
       hasTokkoProperty: !!tokkoProperty,
       portalStats: marketData.portal_stats || [],
       hasPortalStats: !!(marketData.portal_stats && marketData.portal_stats.length > 0),
+      // Totales cross-platform
+      totalVistas,
+      totalPersonas,
+      totalConsultas,
+      hasTotals,
       // Branding del tenant
       primaryColor,
       tenant,
@@ -454,12 +479,12 @@ export class ReportTemplateEngine {
     <hr class="divider" />
 
     <!-- ══════════════════════════════════════════ -->
-    <!-- SECCIÓN 2: ACTIVIDAD EN SU PÁGINA WEB     -->
+    <!-- SECCIÓN 2: ACTIVIDAD EN NUESTRA WEB       -->
     <!-- ══════════════════════════════════════════ -->
     <div class="section">
       <div class="section-header">
         <div class="section-title">Actividad en nuestra página web</div>
-        <div class="section-subtitle">Visitas y consultas en nuestro sitio web durante los últimos 30 días</div>
+        <div class="section-subtitle">Visitas, consultas y contactos en nuestro sitio web durante los últimos 30 días</div>
       </div>
 
       <div class="metrics-grid">
@@ -490,64 +515,50 @@ export class ReportTemplateEngine {
           <div class="label">Guardada como favorita</div>
         </div>
       </div>
+
+      {{#if (or metrics.phone_clicks (or metrics.whatsapp_clicks metrics.email_inquiries))}}
+      <div style="margin-top: 16px;">
+        <div style="font-size: 14px; color: #555; margin-bottom: 8px; font-weight: 600;">Contactos desde la web</div>
+        <div class="metrics-grid-3">
+          <div class="metric-card secondary">
+            <div class="value">{{formatNumber metrics.phone_clicks}}</div>
+            <div class="label">Llamaron por teléfono</div>
+          </div>
+          <div class="metric-card secondary">
+            <div class="value">{{formatNumber metrics.whatsapp_clicks}}</div>
+            <div class="label">Escribieron por WhatsApp</div>
+          </div>
+          <div class="metric-card secondary">
+            <div class="value">{{formatNumber metrics.email_inquiries}}</div>
+            <div class="label">Enviaron consulta por email</div>
+          </div>
+        </div>
+      </div>
+      {{/if}}
     </div>
 
-    <!-- Contactos desde la web -->
-    {{#if (or metrics.phone_clicks (or metrics.whatsapp_clicks metrics.email_inquiries))}}
+    <!-- ══════════════════════════════════════════ -->
+    <!-- EN TOTAL: Resumen cross-platform          -->
+    <!-- ══════════════════════════════════════════ -->
+    {{#if hasTotals}}
     <div class="section">
       <div class="section-header">
-        <div class="section-title">Contactos desde la web</div>
-        <div class="section-subtitle">Personas que usaron los botones de contacto en nuestra web en los últimos 30 días</div>
+        <div class="section-title">En total</div>
+        <div class="section-subtitle">Sumando todos los portales y nuestra página web</div>
       </div>
       <div class="metrics-grid-3">
-        <div class="metric-card secondary">
-          <div class="value">{{formatNumber metrics.phone_clicks}}</div>
-          <div class="label">Llamaron por teléfono</div>
+        <div class="metric-card" style="background: #eef2ff; border-color: #c7d2fe;">
+          <div class="value" style="font-size: 38px;">{{formatNumber totalVistas}}</div>
+          <div class="label">Vistas</div>
         </div>
-        <div class="metric-card secondary">
-          <div class="value">{{formatNumber metrics.whatsapp_clicks}}</div>
-          <div class="label">Escribieron por WhatsApp</div>
+        <div class="metric-card" style="background: #eef2ff; border-color: #c7d2fe;">
+          <div class="value" style="font-size: 38px;">{{formatNumber totalPersonas}}</div>
+          <div class="label">Personas que la vieron</div>
         </div>
-        <div class="metric-card secondary">
-          <div class="value">{{formatNumber metrics.email_inquiries}}</div>
-          <div class="label">Enviaron consulta por email</div>
+        <div class="metric-card" style="background: #eef2ff; border-color: #c7d2fe;">
+          <div class="value" style="font-size: 38px;">{{formatNumber totalConsultas}}</div>
+          <div class="label">Consultas</div>
         </div>
-      </div>
-    </div>
-    {{/if}}
-
-    <!-- Rendimiento por Portal -->
-    {{#if (or metrics.portal_views.zonaprop (or metrics.portal_views.argenprop metrics.portal_views.mercadolibre))}}
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">Visitas por portal</div>
-        <div class="section-subtitle">Cantidad de visualizaciones en cada plataforma durante los últimos 30 días</div>
-      </div>
-      <div class="portals-grid">
-        {{#if (gt metrics.portal_views.zonaprop 0)}}
-        <div class="portal-card">
-          <div class="portal-value">{{formatNumber metrics.portal_views.zonaprop}}</div>
-          <div class="portal-name">ZonaProp</div>
-        </div>
-        {{/if}}
-        {{#if (gt metrics.portal_views.argenprop 0)}}
-        <div class="portal-card">
-          <div class="portal-value">{{formatNumber metrics.portal_views.argenprop}}</div>
-          <div class="portal-name">ArgenProp</div>
-        </div>
-        {{/if}}
-        {{#if (gt metrics.portal_views.mercadolibre 0)}}
-        <div class="portal-card">
-          <div class="portal-value">{{formatNumber metrics.portal_views.mercadolibre}}</div>
-          <div class="portal-name">MercadoLibre</div>
-        </div>
-        {{/if}}
-        {{#if (gt metrics.portal_views.website 0)}}
-        <div class="portal-card">
-          <div class="portal-value">{{formatNumber metrics.portal_views.website}}</div>
-          <div class="portal-name">Sitio Web</div>
-        </div>
-        {{/if}}
       </div>
     </div>
     {{/if}}

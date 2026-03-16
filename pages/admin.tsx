@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 interface Tenant {
   id: string;
   name: string;
+  slug: string | null;
   company_name: string | null;
   agent_name: string | null;
   logo_url: string | null;
@@ -15,10 +16,20 @@ interface Tenant {
   created_at: string;
 }
 
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
 const PORTAL_OPTIONS = ['ZonaProp', 'MercadoLibre', 'ArgenProp', 'BuscadorProp', 'Properati', 'Inmuebles24'];
 
 const EMPTY_FORM = {
   name: '',
+  slug: '',
   company_name: '',
   agent_name: '',
   logo_url: '',
@@ -114,6 +125,7 @@ export default function AdminPage() {
     setEditingId(tenant.id);
     setForm({
       name: tenant.name,
+      slug: tenant.slug || '',
       company_name: tenant.company_name || '',
       agent_name: tenant.agent_name || '',
       logo_url: tenant.logo_url || '',
@@ -127,9 +139,9 @@ export default function AdminPage() {
     setShowForm(true);
   };
 
-  const getAuthUrl = (token: string) => {
+  const getAuthUrl = (tenant: Tenant) => {
     const base = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${base}/auth/${token}`;
+    return `${base}/auth/${tenant.slug || tenant.access_token}`;
   };
 
   const copyToClipboard = (text: string, tokenId: string) => {
@@ -192,10 +204,29 @@ export default function AdminPage() {
                 <input
                   style={styles.input}
                   value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  onChange={e => {
+                    const name = e.target.value;
+                    const updates: any = { ...form, name };
+                    if (!editingId || !form.slug) {
+                      updates.slug = generateSlug(name);
+                    }
+                    setForm(updates);
+                  }}
                   placeholder="Ej: Inmobiliaria Perez"
                   required
                 />
+              </div>
+              <div style={styles.field}>
+                <label style={styles.label}>Slug (URL de acceso)</label>
+                <input
+                  style={styles.input}
+                  value={form.slug}
+                  onChange={e => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                  placeholder="Ej: inmobiliaria-perez"
+                />
+                <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                  URL: /auth/{form.slug || '...'}
+                </div>
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Nombre de la empresa (reportes)</label>
@@ -365,11 +396,11 @@ export default function AdminPage() {
                 <td style={styles.td}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <code style={{ fontSize: '11px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                      {getAuthUrl(tenant.access_token)}
+                      {getAuthUrl(tenant)}
                     </code>
                     <button
                       style={styles.copyBtn}
-                      onClick={() => copyToClipboard(getAuthUrl(tenant.access_token), tenant.id)}
+                      onClick={() => copyToClipboard(getAuthUrl(tenant), tenant.id)}
                     >
                       {copiedToken === tenant.id ? 'Copiado!' : 'Copiar'}
                     </button>

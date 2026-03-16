@@ -27,7 +27,7 @@ export default async function handler(
   if (req.method === 'GET') {
     const { data, error } = await supabase
       .from('tenants')
-      .select('id, name, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
+      .select('id, name, slug, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
       .order('created_at', { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
@@ -36,7 +36,7 @@ export default async function handler(
 
   // POST - Crear nuevo tenant
   if (req.method === 'POST') {
-    const { name, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, ga_credentials_base64 } = req.body;
+    const { name, slug, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, ga_credentials_base64 } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
@@ -48,6 +48,7 @@ export default async function handler(
       .from('tenants')
       .insert({
         name,
+        slug: slug || null,
         company_name: company_name || null,
         agent_name: agent_name || null,
         logo_url: logo_url || null,
@@ -59,7 +60,7 @@ export default async function handler(
         ga_credentials_base64: ga_credentials_base64 || null,
         access_token,
       })
-      .select('id, name, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
+      .select('id, name, slug, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
@@ -75,7 +76,7 @@ export default async function handler(
     }
 
     // Solo permitir actualizar campos validos
-    const allowedFields = ['name', 'company_name', 'agent_name', 'logo_url', 'primary_color', 'portals', 'notification_email', 'tokko_api_key', 'ga_property_id', 'ga_credentials_base64'];
+    const allowedFields = ['name', 'slug', 'company_name', 'agent_name', 'logo_url', 'primary_color', 'portals', 'notification_email', 'tokko_api_key', 'ga_property_id', 'ga_credentials_base64'];
     const updateData: Record<string, any> = {};
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
@@ -90,7 +91,7 @@ export default async function handler(
       .from('tenants')
       .update(updateData)
       .eq('id', id)
-      .select('id, name, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
+      .select('id, name, slug, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
       .single();
 
     if (error) return res.status(500).json({ error: error.message });

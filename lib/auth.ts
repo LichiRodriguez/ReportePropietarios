@@ -66,6 +66,22 @@ export async function getTenantByToken(token: string): Promise<Tenant | null> {
   return data;
 }
 
+export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
+  const { data } = await getSupabase()
+    .from('tenants')
+    .select(TENANT_COLUMNS)
+    .eq('slug', slug)
+    .single();
+  return data;
+}
+
+// Busca primero por slug, luego por access_token (retrocompatible)
+export async function getTenantBySlugOrToken(value: string): Promise<Tenant | null> {
+  const bySlug = await getTenantBySlug(value);
+  if (bySlug) return bySlug;
+  return getTenantByToken(value);
+}
+
 // Para getServerSideProps de paginas protegidas
 export async function getTenantFromPageContext(
   req: IncomingMessage & { cookies: Partial<Record<string, string>> }

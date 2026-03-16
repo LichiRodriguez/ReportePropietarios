@@ -1,5 +1,5 @@
 import type { GetServerSideProps } from 'next';
-import { getTenantByToken, buildSessionCookie } from '@/lib/auth';
+import { getTenantBySlugOrToken, buildSessionCookie } from '@/lib/auth';
 
 export default function AuthPage({ error }: { error?: boolean }) {
   if (error) {
@@ -24,7 +24,7 @@ export default function AuthPage({ error }: { error?: boolean }) {
 export const getServerSideProps: GetServerSideProps = async ({ params, res, req }) => {
   const token = params?.token as string;
 
-  const tenant = await getTenantByToken(token);
+  const tenant = await getTenantBySlugOrToken(token);
 
   if (!tenant) {
     return { props: { error: true } };

@@ -19,6 +19,17 @@ export default async function handler(
   if (!tenant) return res.status(401).json({ error: 'No autorizado' });
 
   try {
+    // Filtro por mes: ?month=2026-03 (default: mes actual)
+    let monthParam = req.query.month as string | undefined;
+    if (!monthParam || !/^\d{4}-\d{2}$/.test(monthParam)) {
+      const now = new Date();
+      monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    const monthStart = `${monthParam}-01`;
+    const [y, m] = monthParam.split('-').map(Number);
+    const next = new Date(y, m, 1);
+    const monthEnd = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+
     const { data, error } = await supabase
       .from('monthly_property_reports')
       .select(`
@@ -35,6 +46,8 @@ export default async function handler(
       `)
       .eq('tenant_id', tenant.id)
       .in('status', ['draft', 'reviewed', 'sent'])
+      .gte('report_month', monthStart)
+      .lt('report_month', monthEnd)
       .order('generated_at', { ascending: false });
 
     if (error) throw error;

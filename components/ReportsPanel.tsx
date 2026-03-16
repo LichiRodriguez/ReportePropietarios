@@ -26,22 +26,45 @@ interface Report {
   };
 }
 
-export default function ReportsPanel() {
+function getCurrentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1, 1);
+  const label = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+interface Props {
+  propertiesCount?: number;
+}
+
+export default function ReportsPanel({ propertiesCount = 0 }: Props) {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'draft' | 'reviewed' | 'sent'>('all');
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [selectedMonth]);
 
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/reports/pending');
+      const res = await fetch(`/api/reports/pending?month=${selectedMonth}`);
       if (!res.ok) throw new Error('Failed to fetch reports');
       const data = await res.json();
       setReports(data);
@@ -148,10 +171,33 @@ export default function ReportsPanel() {
     );
   };
 
-  if (loading) {
+  const isCurrentMonth = selectedMonth === getCurrentMonth();
+
+  // Welcome screen for tenants with no properties
+  if (!loading && propertiesCount === 0) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
-        <p>Cargando reportes...</p>
+      <div style={{ maxWidth: '700px', margin: '0 auto', padding: '60px 24px', fontFamily: 'sans-serif', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 700, marginBottom: '8px' }}>Bienvenido al Sistema de Reportes</h1>
+        <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '40px' }}>
+          Para empezar a generar reportes, segui estos 3 pasos:
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', textAlign: 'center' }}>
+          <a href="/import" style={welcomeCard}>
+            <div style={stepNum}>1</div>
+            <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Importar</div>
+            <div style={{ fontSize: '13px', color: '#666' }}>Carga tus propietarios y propiedades desde un CSV</div>
+          </a>
+          <a href="/vincular" style={welcomeCard}>
+            <div style={stepNum}>2</div>
+            <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Vincular con Tokko</div>
+            <div style={{ fontSize: '13px', color: '#666' }}>Conecta cada propiedad con TokkoBoker para traer metricas</div>
+          </a>
+          <div style={welcomeCard}>
+            <div style={stepNum}>3</div>
+            <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Generar reportes</div>
+            <div style={{ fontSize: '13px', color: '#666' }}>Se generan automaticamente el 1ro de cada mes o manualmente</div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -205,6 +251,26 @@ export default function ReportsPanel() {
         </div>
       </div>
 
+      {/* Month navigator */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '24px' }}>
+        <button
+          onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
+          style={navBtn}
+        >
+          &larr;
+        </button>
+        <span style={{ fontSize: '16px', fontWeight: 600, minWidth: '180px', textAlign: 'center' }}>
+          {formatMonth(selectedMonth)}
+        </span>
+        <button
+          onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))}
+          disabled={isCurrentMonth}
+          style={{ ...navBtn, opacity: isCurrentMonth ? 0.3 : 1, cursor: isCurrentMonth ? 'default' : 'pointer' }}
+        >
+          &rarr;
+        </button>
+      </div>
+
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
         {(['all', 'draft', 'reviewed', 'sent'] as const).map((f) => (
           <button
@@ -225,9 +291,18 @@ export default function ReportsPanel() {
         ))}
       </div>
 
-      {filteredReports.length === 0 ? (
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
+          <p>Cargando reportes...</p>
+        </div>
+      ) : filteredReports.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
-          <p>No hay reportes para mostrar</p>
+          <p>No hay reportes para {formatMonth(selectedMonth)}</p>
+          {propertiesCount > 0 && reports.length === 0 && isCurrentMonth && (
+            <p style={{ marginTop: '8px', fontSize: '14px' }}>
+              Genera tu primer reporte con el boton de arriba
+            </p>
+          )}
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '16px' }}>
@@ -339,3 +414,39 @@ export default function ReportsPanel() {
     </div>
   );
 }
+
+const welcomeCard: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  padding: '24px 16px',
+  background: '#f9fafb',
+  border: '1px solid #e5e7eb',
+  borderRadius: '12px',
+  textDecoration: 'none',
+  color: 'inherit',
+};
+
+const stepNum: React.CSSProperties = {
+  width: '36px',
+  height: '36px',
+  borderRadius: '50%',
+  background: '#1e40af',
+  color: 'white',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '16px',
+  fontWeight: 700,
+  marginBottom: '12px',
+};
+
+const navBtn: React.CSSProperties = {
+  padding: '8px 14px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  background: 'white',
+  cursor: 'pointer',
+  fontSize: '16px',
+  fontWeight: 600,
+};

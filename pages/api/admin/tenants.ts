@@ -23,15 +23,61 @@ export default async function handler(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // GET - Listar todos los tenants
+  // GET - Listar todos los tenants con counts de onboarding
   if (req.method === 'GET') {
-    const { data, error } = await supabase
-      .from('tenants')
-      .select('id, name, slug, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
-      .order('created_at', { ascending: false });
+    const now = new Date();
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const nextMonth = now.getMonth() === 11
+      ? `${now.getFullYear() + 1}-01-01`
+      : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, '0')}-01`;
 
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ tenants: data });
+    const [tenantsRes, propsRes, ownersRes, reportsRes] = await Promise.all([
+      supabase
+        .from('tenants')
+        .select('id, name, slug, company_name, agent_name, logo_url, primary_color, portals, notification_email, tokko_api_key, ga_property_id, access_token, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('properties')
+        .select('tenant_id'),
+      supabase
+        .from('owners')
+        .select('tenant_id'),
+      supabase
+        .from('monthly_property_reports')
+        .select('tenant_id, status, report_month')
+        .gte('report_month', monthStart)
+        .lt('report_month', nextMonth),
+    ]);
+
+    if (tenantsRes.error) return res.status(500).json({ error: tenantsRes.error.message });
+
+    // Contar por tenant en JS
+    const propsByTenant: Record<string, number> = {};
+    for (const p of propsRes.data || []) {
+      propsByTenant[p.tenant_id] = (propsByTenant[p.tenant_id] || 0) + 1;
+    }
+    const ownersByTenant: Record<string, number> = {};
+    for (const o of ownersRes.data || []) {
+      ownersByTenant[o.tenant_id] = (ownersByTenant[o.tenant_id] || 0) + 1;
+    }
+    const reportsByTenant: Record<string, number> = {};
+    const sentByTenant: Record<string, number> = {};
+    for (const r of reportsRes.data || []) {
+      reportsByTenant[r.tenant_id] = (reportsByTenant[r.tenant_id] || 0) + 1;
+      if (r.status === 'sent') {
+        sentByTenant[r.tenant_id] = (sentByTenant[r.tenant_id] || 0) + 1;
+      }
+    }
+
+    const tenants = tenantsRes.data!.map((t: any) => ({
+      ...t,
+      properties_count: propsByTenant[t.id] || 0,
+      owners_count: ownersByTenant[t.id] || 0,
+      reports_this_month: reportsByTenant[t.id] || 0,
+      reports_sent_this_month: sentByTenant[t.id] || 0,
+    }));
+
+    return res.status(200).json({ tenants });
   }
 
   // POST - Crear nuevo tenant

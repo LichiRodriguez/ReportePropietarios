@@ -14,6 +14,10 @@ interface Tenant {
   ga_property_id: string | null;
   access_token: string;
   created_at: string;
+  properties_count?: number;
+  owners_count?: number;
+  reports_this_month?: number;
+  reports_sent_this_month?: number;
 }
 
 function generateSlug(name: string): string {
@@ -346,75 +350,100 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Cliente</th>
-              <th style={styles.th}>Empresa</th>
-              <th style={styles.th}>Color</th>
-              <th style={styles.th}>Portales</th>
-              <th style={styles.th}>Email notif.</th>
-              <th style={styles.th}>Tokko</th>
-              <th style={styles.th}>GA</th>
-              <th style={styles.th}>URL de acceso</th>
-              <th style={styles.th}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.map(tenant => (
-              <tr key={tenant.id}>
-                <td style={styles.td}>
-                  <strong>{tenant.name}</strong>
-                  {tenant.agent_name && <div style={{ fontSize: '12px', color: '#666' }}>{tenant.agent_name}</div>}
-                </td>
-                <td style={styles.td}>{tenant.company_name || '-'}</td>
-                <td style={styles.td}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '20px', height: '20px', borderRadius: '4px', background: tenant.primary_color, display: 'inline-block' }}></span>
-                    <span style={{ fontSize: '12px', color: '#666' }}>{tenant.primary_color}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {tenants.map(tenant => {
+          const checklist = [
+            { label: 'Slug', ok: !!tenant.slug },
+            { label: 'Tokko API', ok: !!tenant.tokko_api_key },
+            { label: 'Google Analytics', ok: !!tenant.ga_property_id, optional: true },
+            { label: 'Logo', ok: !!tenant.logo_url },
+            { label: 'Propiedades', ok: (tenant.properties_count || 0) > 0 },
+            { label: 'Reportes', ok: (tenant.reports_this_month || 0) > 0 },
+          ];
+          const done = checklist.filter(c => c.ok).length;
+          const total = checklist.length;
+
+          return (
+            <div key={tenant.id} style={styles.card}>
+              {/* Header */}
+              <div style={styles.cardHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                  <span style={{ width: '10px', height: '40px', borderRadius: '4px', background: tenant.primary_color, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '18px', fontWeight: 700 }}>{tenant.name}</div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      {tenant.company_name || 'Sin empresa'} {tenant.agent_name ? `· ${tenant.agent_name}` : ''}
+                    </div>
                   </div>
-                </td>
-                <td style={styles.td}>
-                  <span style={{ fontSize: '12px', color: '#555' }}>{(tenant.portals || ['ZonaProp', 'MercadoLibre', 'ArgenProp']).join(', ')}</span>
-                </td>
-                <td style={styles.td}>
-                  <span style={{ fontSize: '12px', color: tenant.notification_email ? '#166534' : '#999' }}>
-                    {tenant.notification_email || 'No'}
-                  </span>
-                </td>
-                <td style={styles.td}>
-                  <span style={{ ...styles.badge, background: tenant.tokko_api_key ? '#dcfce7' : '#f3f4f6', color: tenant.tokko_api_key ? '#166534' : '#999' }}>
-                    {tenant.tokko_api_key ? 'Configurado' : 'No'}
-                  </span>
-                </td>
-                <td style={styles.td}>
-                  <span style={{ ...styles.badge, background: tenant.ga_property_id ? '#dcfce7' : '#f3f4f6', color: tenant.ga_property_id ? '#166534' : '#999' }}>
-                    {tenant.ga_property_id ? 'Configurado' : 'No'}
-                  </span>
-                </td>
-                <td style={styles.td}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <code style={{ fontSize: '11px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                      {getAuthUrl(tenant)}
-                    </code>
-                    <button
-                      style={styles.copyBtn}
-                      onClick={() => copyToClipboard(getAuthUrl(tenant), tenant.id)}
-                    >
-                      {copiedToken === tenant.id ? 'Copiado!' : 'Copiar'}
-                    </button>
+                  <div style={{ display: 'flex', gap: '6px', marginLeft: '12px' }}>
+                    {tenant.tokko_api_key && <span style={{ ...styles.badge, background: '#dcfce7', color: '#166534' }}>Tokko</span>}
+                    {tenant.ga_property_id && <span style={{ ...styles.badge, background: '#dbeafe', color: '#1e40af' }}>GA</span>}
+                    {tenant.logo_url && <span style={{ ...styles.badge, background: '#f3e8ff', color: '#7c3aed' }}>Logo</span>}
                   </div>
-                </td>
-                <td style={styles.td}>
-                  <button style={styles.editBtn} onClick={() => startEdit(tenant)}>
-                    Editar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button style={styles.editBtn} onClick={() => startEdit(tenant)}>Editar</button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div style={styles.cardBody}>
+                {/* Checklist */}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>
+                    Onboarding {done}/{total}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+                    {checklist.map(item => (
+                      <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                        <span style={{ color: item.ok ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: '14px' }}>
+                          {item.ok ? '\u2713' : '\u2717'}
+                        </span>
+                        <span style={{ color: item.ok ? '#333' : '#999' }}>
+                          {item.label}{item.optional ? ' (opc.)' : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Counts */}
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={styles.statBox}>
+                    <div style={styles.statNum}>{tenant.properties_count || 0}</div>
+                    <div style={styles.statLabel}>Propiedades</div>
+                  </div>
+                  <div style={styles.statBox}>
+                    <div style={styles.statNum}>{tenant.owners_count || 0}</div>
+                    <div style={styles.statLabel}>Propietarios</div>
+                  </div>
+                  <div style={styles.statBox}>
+                    <div style={styles.statNum}>{tenant.reports_this_month || 0}</div>
+                    <div style={styles.statLabel}>Reportes</div>
+                  </div>
+                  <div style={styles.statBox}>
+                    <div style={styles.statNum}>{tenant.reports_sent_this_month || 0}</div>
+                    <div style={styles.statLabel}>Enviados</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer: URL */}
+              <div style={styles.cardFooter}>
+                <span style={{ fontSize: '12px', color: '#666' }}>URL:</span>
+                <code style={{ fontSize: '12px', background: '#f3f4f6', padding: '3px 8px', borderRadius: '4px' }}>
+                  {getAuthUrl(tenant)}
+                </code>
+                <button
+                  style={styles.copyBtn}
+                  onClick={() => copyToClipboard(getAuthUrl(tenant), tenant.id)}
+                >
+                  {copiedToken === tenant.id ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
         {tenants.length === 0 && (
           <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
             No hay clientes. Crea el primero con el boton de arriba.
@@ -439,11 +468,14 @@ const styles: Record<string, React.CSSProperties> = {
   label: { fontSize: '13px', fontWeight: 600, color: '#555' },
   input: { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', outline: 'none' },
   formActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' },
-  tableWrapper: { background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'auto' },
-  table: { width: '100%', minWidth: '1050px', borderCollapse: 'collapse' as const, fontSize: '14px' },
-  th: { textAlign: 'left' as const, padding: '12px 16px', background: '#f9fafb', fontWeight: 600, color: '#475569', borderBottom: '2px solid #e5e7eb', fontSize: '13px' },
-  td: { padding: '12px 16px', borderBottom: '1px solid #f3f4f6' },
   badge: { padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 500 },
   copyBtn: { background: '#e5e7eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' as const },
   editBtn: { background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' },
+  card: { background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f3f4f6' },
+  cardBody: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', gap: '24px' },
+  cardFooter: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#f9fafb', borderTop: '1px solid #f3f4f6' },
+  statBox: { textAlign: 'center' as const, padding: '8px 12px', background: '#f9fafb', borderRadius: '8px', minWidth: '70px' },
+  statNum: { fontSize: '20px', fontWeight: 700, color: '#1e40af' },
+  statLabel: { fontSize: '11px', color: '#666', marginTop: '2px' },
 };
